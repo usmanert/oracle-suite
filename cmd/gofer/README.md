@@ -23,13 +23,13 @@ exactly, from how many sources you want to pull prices and what conditions they 
 ## Installation
 
 To install it, you'll first need Go installed on your machine. Then you can use standard Go
-command: `go get -u github.com/makerdao/oracle-suite/cmd/gofer`.
+command: `go get -u github.com/chronicleprotocol/oracle-suite/cmd/gofer`.
 
 Alternatively, you can build Gofer using `Makefile` directly from the repository. This approach is recommended if you
 wish to work on Gofer source.
 
 ```bash
-git clone https://github.com/makerdao/oracle-suite.git
+git clone https://github.com/ma/oracle-suite.git
 cd oracle-suite
 make
 ```
@@ -359,14 +359,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/makerdao/oracle-suite/internal/query"
+	"github.com/chronicleprotocol/oracle-suite/internal/query"
 
-	"github.com/makerdao/oracle-suite/pkg/gofer"
-	"github.com/makerdao/oracle-suite/pkg/gofer/graph"
-	"github.com/makerdao/oracle-suite/pkg/gofer/graph/feeder"
-	"github.com/makerdao/oracle-suite/pkg/gofer/graph/nodes"
-	"github.com/makerdao/oracle-suite/pkg/gofer/origins"
-	"github.com/makerdao/oracle-suite/pkg/log/null"
+	"github.com/chronicleprotocol/oracle-suite/pkg/gofer"
+	"github.com/chronicleprotocol/oracle-suite/pkg/gofer/graph"
+	"github.com/chronicleprotocol/oracle-suite/pkg/gofer/graph/feeder"
+	"github.com/chronicleprotocol/oracle-suite/pkg/gofer/graph/nodes"
+	"github.com/chronicleprotocol/oracle-suite/pkg/gofer/origins"
+	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
 )
 
 func main() {
@@ -396,7 +396,7 @@ func main() {
 ```
 
 The full documentation for Gofer library can be found
-here: https://pkg.go.dev/github.com/makerdao/oracle-suite/pkg/gofer
+here: https://pkg.go.dev/github.com/chronicleprotocol/oracle-suite/pkg/gofer
 
 ## License
 
