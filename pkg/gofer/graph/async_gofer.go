@@ -29,8 +29,8 @@ import (
 type AsyncGofer struct {
 	*Gofer
 	ctx    context.Context
+	waitCh chan error
 	feeder *feeder.Feeder
-	doneCh chan struct{}
 }
 
 // NewAsyncGofer returns a new AsyncGofer instance.
@@ -42,7 +42,7 @@ func NewAsyncGofer(ctx context.Context, g map[gofer.Pair]nodes.Aggregator, f *fe
 		Gofer:  NewGofer(g, nil),
 		ctx:    ctx,
 		feeder: f,
-		doneCh: make(chan struct{}),
+		waitCh: make(chan error),
 	}, nil
 }
 
@@ -53,14 +53,12 @@ func (a *AsyncGofer) Start() error {
 	return a.feeder.Start(ns...)
 }
 
-// Wait waits until feeder's context is cancelled.
-func (a *AsyncGofer) Wait() {
-	<-a.doneCh
+// Wait waits until the context is canceled or until an error occurs.
+func (a *AsyncGofer) Wait() chan error {
+	return a.waitCh
 }
 
 func (a *AsyncGofer) contextCancelHandler() {
-	defer func() { close(a.doneCh) }()
+	defer func() { a.waitCh <- nil }()
 	<-a.ctx.Done()
-
-	a.feeder.Wait()
 }

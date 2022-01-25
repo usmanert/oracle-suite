@@ -44,7 +44,7 @@ type AgentConfig struct {
 // Agent creates and manages an RPC server for remote Gofer calls.
 type Agent struct {
 	ctx    context.Context
-	doneCh chan struct{}
+	waitCh chan error
 
 	api      *API
 	rpc      *rpc.Server
@@ -62,7 +62,7 @@ func NewAgent(ctx context.Context, cfg AgentConfig) (*Agent, error) {
 	}
 	server := &Agent{
 		ctx:    ctx,
-		doneCh: make(chan struct{}),
+		waitCh: make(chan error),
 		api: &API{
 			gofer: cfg.Gofer,
 			log:   cfg.Logger.WithField("tag", AgentLoggerTag),
@@ -112,18 +112,13 @@ func (s *Agent) Start() error {
 	return nil
 }
 
-// Wait waits until agent's context is cancelled.
-func (s *Agent) Wait() {
-	<-s.doneCh
+// Wait waits until the context is canceled or until an error occurs.
+func (s *Agent) Wait() chan error {
+	return s.waitCh
 }
 
 func (s *Agent) contextCancelHandler() {
-	defer func() { close(s.doneCh) }()
 	defer s.log.Info("Stopped")
 	<-s.ctx.Done()
-
-	err := s.listener.Close()
-	if err != nil {
-		s.log.WithError(err).Error("Unable to close RPC listener")
-	}
+	s.waitCh <- s.listener.Close()
 }

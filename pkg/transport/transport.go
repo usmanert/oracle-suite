@@ -44,6 +44,6 @@ type Transport interface {
 	Messages(topic string) chan ReceivedMessage
 	// Start starts listening for messages.
 	Start() error
-	// Wait waits until transport's context is cancelled.
-	Wait()
+	// Wait waits until the context is canceled or until an error occurs.
+	Wait() chan error
 }
