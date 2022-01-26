@@ -1,15 +1,10 @@
 name: Release Binaries
 on:
-  push:
-    branches:
-      - master
-    tags:
-      - '*.*.*' # semver, will override latest
-      - '*-preview' # preview, won't override latest
-  pull_request:
-    branches:
-      - master
   workflow_dispatch: # Allow manual trigger
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+      - v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+
 
 jobs:
   goreleaser:
