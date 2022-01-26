@@ -1,5 +1,5 @@
-name: Build & Release Binary files
-#  Build & Push rebuilds the tendermint docker image on every push to master and creation of tags
+name: Publish Docker images
+# Build & Push rebuilds the tendermint docker image on every push to master and creation of tags
 # and pushes the image to https://hub.docker.com/r/interchainio/simapp/tags
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Publish Gofer to Github Packages
+      - name: Build and Publish Gofer Docker image to Github Packages
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
@@ -49,7 +49,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/chronicleprotocol/gofer:${{ steps.prep.outputs.version }},ghcr.io/chronicleprotocol/gofer:latest
 
-      - name: Build and Publish Spire to Github Packages
+      - name: Build and Publish Spire Docker image to Github Packages
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
@@ -58,7 +58,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/chronicleprotocol/spire:${{ steps.prep.outputs.version }},ghcr.io/chronicleprotocol/spire:latest
       
-      - name: Build and Publish Ghost to Github Packages
+      - name: Build and Publish Ghost Docker image to Github Packages
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
@@ -67,7 +67,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/chronicleprotocol/ghost:${{ steps.prep.outputs.version }},ghcr.io/chronicleprotocol/ghost:latest
 
-      - name: Build and Publish Leeloo to Github Packages
+      - name: Build and Publish Leeloo Docker image to Github Packages
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
@@ -76,7 +76,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/chronicleprotocol/leeloo:${{ steps.prep.outputs.version }},ghcr.io/chronicleprotocol/leeloo:latest
 
-      - name: Build and Publish Lair to Github Packages
+      - name: Build and Publish Lair Docker image to Github Packages
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
@@ -85,7 +85,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ghcr.io/chronicleprotocol/lair:${{ steps.prep.outputs.version }},ghcr.io/chronicleprotocol/lair:latest
 
-      - name: Build and Publish Spectre to Github Packages
+      - name: Build and Publish Spectre Docker image to Github Packages
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
