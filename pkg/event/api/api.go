@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -115,7 +116,9 @@ func (e *EventAPI) handler(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	events, err := e.es.Events(typ[0], idx)
+	ctx, ctxCancel := context.WithTimeout(e.ctx, defaultTimeout)
+	defer ctxCancel()
+	events, err := e.es.Events(ctx, typ[0], idx)
 	if err != nil {
 		e.log.WithError(err).Error("Event store error")
 		res.WriteHeader(http.StatusInternalServerError)
@@ -127,6 +130,9 @@ func (e *EventAPI) handler(res http.ResponseWriter, req *http.Request) {
 }
 
 func mapEvents(es []*messages.Event) (r []*jsonEvent) {
+	sort.Slice(es, func(i, j int) bool {
+		return es[i].MessageDate.Unix() < es[j].MessageDate.Unix()
+	})
 	for _, e := range es {
 		j := &jsonEvent{
 			Timestamp:  e.EventDate.Unix(),
