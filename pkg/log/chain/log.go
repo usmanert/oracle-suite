@@ -13,7 +13,7 @@
 //  You should have received a copy of the GNU Affero General Public License
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package callback
+package chain
 
 import (
 	"fmt"
@@ -21,130 +21,129 @@ import (
 	"github.com/chronicleprotocol/oracle-suite/pkg/log"
 )
 
-type LogFunc func(level log.Level, fields log.Fields, log string)
-
-// New creates a new logger that allows using a custom callback function that
-// will be invoked every time a log message is created.
-func New(level log.Level, callback LogFunc) log.Logger {
+// New creates a new logger that can chain multiple loggers.
+func New(loggers ...log.Logger) log.Logger {
 	return &logger{
-		level:    level,
-		fields:   log.Fields{},
-		callback: callback,
+		loggers: loggers,
 	}
 }
 
 type logger struct {
-	level    log.Level
-	fields   log.Fields
-	callback LogFunc
+	loggers []log.Logger
 }
 
 // Level implements the log.Logger interface.
 func (c *logger) Level() log.Level {
-	return c.level
+	lvl := log.Panic
+	for _, l := range c.loggers {
+		if l.Level() > lvl {
+			lvl = l.Level()
+		}
+	}
+	return lvl
 }
 
 // WithField implements the log.Logger interface.
 func (c *logger) WithField(key string, value interface{}) log.Logger {
-	f := log.Fields{}
-	for k, v := range c.fields {
-		f[k] = v
+	loggers := make([]log.Logger, len(c.loggers))
+	for n, l := range c.loggers {
+		loggers[n] = l.WithField(key, value)
 	}
-	f[key] = value
-	return &logger{
-		level:    c.level,
-		fields:   f,
-		callback: c.callback,
-	}
+	return &logger{loggers: loggers}
 }
 
 // WithFields implements the log.Logger interface.
 func (c *logger) WithFields(fields log.Fields) log.Logger {
-	f := log.Fields{}
-	for k, v := range c.fields {
-		f[k] = v
+	loggers := make([]log.Logger, len(c.loggers))
+	for n, l := range c.loggers {
+		loggers[n] = l.WithFields(fields)
 	}
-	for k, v := range fields {
-		f[k] = v
-	}
-	return &logger{
-		level:    c.level,
-		fields:   f,
-		callback: c.callback,
-	}
+	return &logger{loggers: loggers}
 }
 
 // WithError implements the log.Logger interface.
 func (c *logger) WithError(err error) log.Logger {
-	return c.WithField("err", err.Error())
+	loggers := make([]log.Logger, len(c.loggers))
+	for n, l := range c.loggers {
+		loggers[n] = l.WithError(err)
+	}
+	return &logger{loggers: loggers}
 }
 
 // Debugf implements the log.Logger interface.
 func (c *logger) Debugf(format string, args ...interface{}) {
-	if c.level >= log.Debug {
-		c.callback(c.level, c.fields, fmt.Sprintf(format, args...))
+	for _, l := range c.loggers {
+		l.Debugf(format, args...)
 	}
 }
 
 // Infof implements the log.Logger interface.
 func (c *logger) Infof(format string, args ...interface{}) {
-	if c.level >= log.Info {
-		c.callback(c.level, c.fields, fmt.Sprintf(format, args...))
+	for _, l := range c.loggers {
+		l.Infof(format, args...)
 	}
 }
 
 // Warnf implements the log.Logger interface.
 func (c *logger) Warnf(format string, args ...interface{}) {
-	if c.level >= log.Warn {
-		c.callback(c.level, c.fields, fmt.Sprintf(format, args...))
+	for _, l := range c.loggers {
+		l.Warnf(format, args...)
 	}
 }
 
 // Errorf implements the log.Logger interface.
 func (c *logger) Errorf(format string, args ...interface{}) {
-	if c.level >= log.Error {
-		c.callback(c.level, c.fields, fmt.Sprintf(format, args...))
+	for _, l := range c.loggers {
+		l.Errorf(format, args...)
 	}
 }
 
 // Panicf implements the log.Logger interface.
 func (c *logger) Panicf(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	c.callback(c.level, c.fields, msg)
-	panic(msg)
+	for _, l := range c.loggers {
+		func() {
+			defer func() { recover() }() //nolint:errcheck // same panic is thrown below
+			l.Panicf(format, args...)
+		}()
+	}
+	panic(fmt.Sprintf(format, args...))
 }
 
 // Debug implements the log.Logger interface.
 func (c *logger) Debug(args ...interface{}) {
-	if c.level >= log.Debug {
-		c.callback(c.level, c.fields, fmt.Sprint(args...))
+	for _, l := range c.loggers {
+		l.Debug(args...)
 	}
 }
 
 // Info implements the log.Logger interface.
 func (c *logger) Info(args ...interface{}) {
-	if c.level >= log.Info {
-		c.callback(c.level, c.fields, fmt.Sprint(args...))
+	for _, l := range c.loggers {
+		l.Info(args...)
 	}
 }
 
 // Warn implements the log.Logger interface.
 func (c *logger) Warn(args ...interface{}) {
-	if c.level >= log.Warn {
-		c.callback(c.level, c.fields, fmt.Sprint(args...))
+	for _, l := range c.loggers {
+		l.Warn(args...)
 	}
 }
 
 // Error implements the log.Logger interface.
 func (c *logger) Error(args ...interface{}) {
-	if c.level >= log.Error {
-		c.callback(c.level, c.fields, fmt.Sprint(args...))
+	for _, l := range c.loggers {
+		l.Error(args...)
 	}
 }
 
 // Panic implements the log.Logger interface.
 func (c *logger) Panic(args ...interface{}) {
-	msg := fmt.Sprint(args...)
-	c.callback(c.level, c.fields, msg)
-	panic(msg)
+	for _, l := range c.loggers {
+		func() {
+			defer func() { recover() }() //nolint:errcheck // same panic is thrown below
+			l.Panic(args...)
+		}()
+	}
+	panic(fmt.Sprint(args...))
 }
