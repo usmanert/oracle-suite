@@ -13,9 +13,8 @@ let
 in buildGoModule {
   pname = "oracle-suite";
   version = pkgs.lib.fileContents ./version;
-  #  version = "dev-${ver}";
   src = ./.;
-  vendorSha256 = "SNF53ZuiZJ6tJeDLCxid/rftLwNYVvecc2zHDGtC5Ik=";
+  vendorSha256 = "9NNnkFCGFU/6pmBahnKU3Ck8vnPmvmQRGZNmCimY7CQ=";
   subPackages = [ "cmd/..." ];
   postConfigure = "export CGO_ENABLED=0";
   postInstall = "cp ./config.json $out";
