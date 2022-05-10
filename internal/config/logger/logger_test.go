@@ -70,6 +70,22 @@ func TestLogger_Configure(t *testing.T) {
 					Name:        "name6",
 					OnDuplicate: "",
 				},
+				{
+					Name:       "name7",
+					ValueScale: 0,
+				},
+				{
+					Name:       "name8",
+					ValueScale: 1,
+				},
+				{
+					Name:       "name9",
+					ValueScale: 1e2,
+				},
+				{
+					Name:       "name10",
+					ValueScale: 1e-2,
+				},
 			},
 		},
 	}
@@ -90,6 +106,16 @@ func TestLogger_Configure(t *testing.T) {
 		assert.Equal(t, grafana.Max, cfg.Metrics[3].OnDuplicate)
 		assert.Equal(t, grafana.Replace, cfg.Metrics[4].OnDuplicate)
 		assert.Equal(t, grafana.Replace, cfg.Metrics[5].OnDuplicate)
+
+		assert.Nil(t, cfg.Metrics[6].TransformFunc)
+		assert.Nil(t, cfg.Metrics[7].TransformFunc)
+
+		assert.NotNil(t, cfg.Metrics[8].TransformFunc)
+		assert.Equal(t, 0.01, cfg.Metrics[8].TransformFunc(1))
+
+		assert.NotNil(t, cfg.Metrics[9].TransformFunc)
+		assert.Equal(t, 100.0, cfg.Metrics[9].TransformFunc(1))
+
 		return cfg.Logger
 	}
 

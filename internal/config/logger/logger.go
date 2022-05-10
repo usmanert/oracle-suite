@@ -55,6 +55,7 @@ type grafanaMetric struct {
 	MatchMessage string              `json:"matchMessage"`
 	MatchFields  map[string]string   `json:"matchFields"`
 	Value        string              `json:"value"`
+	ValueScale   float64             `json:"valueScale"`
 	Name         string              `json:"name"`
 	Tags         map[string][]string `json:"tags"`
 	OnDuplicate  string              `json:"onDuplicate"`
@@ -68,9 +69,10 @@ func (c *Logger) Configure(d Dependencies) (log.Logger, error) {
 		var ms []grafana.Metric
 		for _, cm := range c.Grafana.Metrics {
 			gm := grafana.Metric{
-				Value: cm.Value,
-				Name:  cm.Name,
-				Tags:  cm.Tags,
+				Value:         cm.Value,
+				Name:          cm.Name,
+				Tags:          cm.Tags,
+				TransformFunc: scalingFunc(cm.ValueScale),
 			}
 
 			// Compile the regular expression for a message:
@@ -139,4 +141,11 @@ func (c *Logger) Configure(d Dependencies) (log.Logger, error) {
 		})
 
 	return logger, nil
+}
+
+func scalingFunc(scale float64) func(v float64) float64 {
+	if scale == 0 || scale == 1 {
+		return nil
+	}
+	return func(v float64) float64 { return v / scale }
 }

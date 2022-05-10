@@ -72,6 +72,8 @@ type Metric struct {
 	// OnDuplicate specifies how duplicated values in the same interval should
 	// be handled.
 	OnDuplicate OnDuplicate
+	// TransformFunc defines the function applied to the value before setting it.
+	TransformFunc func(float64) float64
 }
 
 // New creates a new logger that can extract parameters from log messages and
@@ -298,6 +300,9 @@ func (c *logger) collect(msg string, fields log.Fields) {
 				}
 				mv.tags = append(mv.tags, t+"="+rt)
 			}
+		}
+		if metric.TransformFunc != nil {
+			mv.value = metric.TransformFunc(mv.value)
 		}
 		c.addMetricPoint(metric, mk, mv)
 	}
