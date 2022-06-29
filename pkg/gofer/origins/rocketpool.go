@@ -19,6 +19,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -27,24 +28,22 @@ import (
 	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
 )
 
-//go:embed wsteth_abi.json
-var wrappedStakedETHABI string
-
-const ether uint64 = 1e18
-
-type WrappedStakedETH struct {
+type RockerPool struct {
 	ethClient ethereum.Client
 	addrs     ContractAddresses
 	abi       abi.ABI
 	blocks    []int64
 }
 
-func NewWrappedStakedETH(cli ethereum.Client, addrs ContractAddresses, blocks []int64) (*WrappedStakedETH, error) {
-	a, err := abi.JSON(strings.NewReader(wrappedStakedETHABI))
+//go:embed rocketpool_abi.json
+var rocketPoolABI string
+
+func NewRockerPool(cli ethereum.Client, addrs ContractAddresses, blocks []int64) (*RockerPool, error) {
+	a, err := abi.JSON(strings.NewReader(rocketPoolABI))
 	if err != nil {
 		return nil, err
 	}
-	return &WrappedStakedETH{
+	return &RockerPool{
 		ethClient: cli,
 		addrs:     addrs,
 		abi:       a,
@@ -52,11 +51,11 @@ func NewWrappedStakedETH(cli ethereum.Client, addrs ContractAddresses, blocks []
 	}, nil
 }
 
-func (s WrappedStakedETH) PullPrices(pairs []Pair) []FetchResult {
+func (s RockerPool) PullPrices(pairs []Pair) []FetchResult {
 	return callSinglePairOrigin(&s, pairs)
 }
 
-func (s WrappedStakedETH) callOne(pair Pair) (*Price, error) {
+func (s RockerPool) callOne(pair Pair) (*Price, error) {
 	contract, inverted, err := s.addrs.AddressByPair(pair)
 	if err != nil {
 		return nil, err
@@ -64,19 +63,18 @@ func (s WrappedStakedETH) callOne(pair Pair) (*Price, error) {
 
 	var callData []byte
 	if !inverted {
-		callData, err = s.abi.Pack("stEthPerToken")
+		callData, err = s.abi.Pack("getExchangeRate")
 	} else {
-		callData, err = s.abi.Pack("tokensPerStEth")
+		callData, err = s.abi.Pack("getRethValue", big.NewInt(0).SetUint64(ether))
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get contract args for pair: %s", pair.String())
+		return nil, fmt.Errorf("failed to get contract args for pair: %s: %w", pair.String(), err)
 	}
 
 	resp, err := s.ethClient.CallBlocks(context.Background(), ethereum.Call{Address: contract, Data: callData}, s.blocks)
 	if err != nil {
 		return nil, err
 	}
-
 	price, _ := reduceEtherAverageFloat(resp).Float64()
 	return &Price{
 		Pair:      pair,

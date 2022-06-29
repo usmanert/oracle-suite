@@ -57,6 +57,9 @@ type Client interface {
 	// Call executes a message call transaction, which is directly
 	// executed in the VM of the node, but never mined into the blockchain.
 	Call(ctx context.Context, call Call) ([]byte, error)
+	// CallBlocks executes the same call on multiple blocks (counting back from the latest)
+	// and returns multiple results in a slice
+	CallBlocks(ctx context.Context, call Call, blocks []int64) ([][]byte, error)
 	// MultiCall works like the Call function but allows to execute multiple
 	// calls at once.
 	MultiCall(ctx context.Context, calls []Call) ([][]byte, error)

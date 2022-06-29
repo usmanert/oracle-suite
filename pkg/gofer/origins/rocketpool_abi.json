@@ -2,12 +2,25 @@
   {
     "inputs": [
       {
-        "internalType": "enum IPriceOracle.Variable",
-        "name": "variable",
-        "type": "uint8"
+        "internalType": "uint256",
+        "name": "_rethAmount",
+        "type": "uint256"
       }
     ],
-    "name": "getLatest",
+    "name": "getEthValue",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getExchangeRate",
     "outputs": [
       {
         "internalType": "uint256",
@@ -21,26 +34,16 @@
   {
     "inputs": [
       {
-        "internalType": "contract IERC20",
-        "name": "token",
-        "type": "address"
+        "internalType": "uint256",
+        "name": "_ethAmount",
+        "type": "uint256"
       }
     ],
-    "name": "getPriceRateCache",
+    "name": "getRethValue",
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "rate",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "duration",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "expires",
+        "name": "",
         "type": "uint256"
       }
     ],
