@@ -20,15 +20,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chronicleprotocol/oracle-suite/internal/config"
-	eventAPIConfig "github.com/chronicleprotocol/oracle-suite/internal/config/eventapi"
-	feedsConfig "github.com/chronicleprotocol/oracle-suite/internal/config/feeds"
-	loggerConfig "github.com/chronicleprotocol/oracle-suite/internal/config/logger"
-	transportConfig "github.com/chronicleprotocol/oracle-suite/internal/config/transport"
-	"github.com/chronicleprotocol/oracle-suite/internal/supervisor"
-	"github.com/chronicleprotocol/oracle-suite/internal/sysmon"
+	"github.com/chronicleprotocol/oracle-suite/pkg/config"
+	eventAPIConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/eventapi"
+	feedsConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/feeds"
+	loggerConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/logger"
+	transportConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/transport"
 	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum/geth"
+	"github.com/chronicleprotocol/oracle-suite/pkg/event/publisher/teleportevm"
+	"github.com/chronicleprotocol/oracle-suite/pkg/event/publisher/teleportstarknet"
 	"github.com/chronicleprotocol/oracle-suite/pkg/event/store"
+	"github.com/chronicleprotocol/oracle-suite/pkg/supervisor"
+	"github.com/chronicleprotocol/oracle-suite/pkg/sysmon"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
@@ -61,7 +63,7 @@ func PrepareServices(ctx context.Context, opts *options) (*supervisor.Supervisor
 		Feeds:  fed,
 		Logger: log,
 	},
-		map[string]transport.Message{messages.EventMessageName: (*messages.Event)(nil)},
+		map[string]transport.Message{messages.EventV1MessageName: (*messages.Event)(nil)},
 	)
 	if err != nil {
 		return nil, fmt.Errorf(`transport config error: %w`, err)
@@ -71,9 +73,10 @@ func PrepareServices(ctx context.Context, opts *options) (*supervisor.Supervisor
 		return nil, fmt.Errorf(`lair config error: %w`, err)
 	}
 	evs, err := store.New(store.Config{
-		Storage:   sto,
-		Transport: tra,
-		Log:       log,
+		EventTypes: []string{teleportevm.TeleportEventType, teleportstarknet.TeleportEventType},
+		Storage:    sto,
+		Transport:  tra,
+		Logger:     log,
 	})
 	if err != nil {
 		return nil, fmt.Errorf(`lair config error: %w`, err)

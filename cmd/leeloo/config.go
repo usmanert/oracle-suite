@@ -20,14 +20,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chronicleprotocol/oracle-suite/internal/config"
-	ethereumConfig "github.com/chronicleprotocol/oracle-suite/internal/config/ethereum"
-	leelooConfig "github.com/chronicleprotocol/oracle-suite/internal/config/eventpublisher"
-	feedsConfig "github.com/chronicleprotocol/oracle-suite/internal/config/feeds"
-	loggerConfig "github.com/chronicleprotocol/oracle-suite/internal/config/logger"
-	transportConfig "github.com/chronicleprotocol/oracle-suite/internal/config/transport"
-	"github.com/chronicleprotocol/oracle-suite/internal/supervisor"
-	"github.com/chronicleprotocol/oracle-suite/internal/sysmon"
+	"github.com/chronicleprotocol/oracle-suite/pkg/config"
+	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
+	leelooConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/eventpublisher"
+	feedsConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/feeds"
+	loggerConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/logger"
+	transportConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/supervisor"
+	"github.com/chronicleprotocol/oracle-suite/pkg/sysmon"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
@@ -65,7 +65,7 @@ func PrepareServices(ctx context.Context, opts *options) (*supervisor.Supervisor
 		Feeds:  fed,
 		Logger: log,
 	},
-		map[string]transport.Message{messages.EventMessageName: (*messages.Event)(nil)},
+		map[string]transport.Message{messages.EventV1MessageName: (*messages.Event)(nil)},
 	)
 	if err != nil {
 		return nil, fmt.Errorf(`transort config error: %w`, err)

@@ -21,6 +21,7 @@ import (
 	"errors"
 
 	"github.com/chronicleprotocol/oracle-suite/pkg/log"
+	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
@@ -30,21 +31,29 @@ const LoggerTag = "EVENT_STORE"
 // EventStore listens for event messages using the transport and stores
 // them for later use.
 type EventStore struct {
-	ctx       context.Context
-	storage   Storage
-	transport transport.Transport
-	log       log.Logger
-	waitCh    chan error
+	ctx        context.Context
+	eventTypes []string
+	storage    Storage
+	transport  transport.Transport
+	log        log.Logger
+	waitCh     chan error
 }
 
-// Config contains configuration parameters for EventStore.
+// Config is the configuration for the EventStore.
 type Config struct {
-	Storage   Storage
+	// EventTypes is a list of supported event types. Events of other types will
+	// be ignored.
+	EventTypes []string
+	// Storage is the storage implementation.
+	Storage Storage
+	// Transport is a transport interface used to fetch events from Oracles.
 	Transport transport.Transport
-	Log       log.Logger
+	// Logger is a current logger interface used by the EventStore.
+	// The Logger is required to monitor asynchronous processes.
+	Logger log.Logger
 }
 
-// Storage provides an interface to the event storage mechanism.
+// Storage provides an interface to the event storage.
 type Storage interface {
 	// Add adds an event to the store. If the event already exists, it will be
 	// updated if the MessageDate is newer. The first argument is true if the
@@ -57,11 +66,21 @@ type Storage interface {
 
 // New returns a new instance of the EventStore struct.
 func New(cfg Config) (*EventStore, error) {
+	if cfg.Storage == nil {
+		return nil, errors.New("storage must not be nil")
+	}
+	if cfg.Transport == nil {
+		return nil, errors.New("transport must not be nil")
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = null.New()
+	}
 	return &EventStore{
-		storage:   cfg.Storage,
-		transport: cfg.Transport,
-		log:       cfg.Log.WithField("tag", LoggerTag),
-		waitCh:    make(chan error),
+		eventTypes: cfg.EventTypes,
+		storage:    cfg.Storage,
+		transport:  cfg.Transport,
+		log:        cfg.Logger.WithField("tag", LoggerTag),
+		waitCh:     make(chan error),
 	}, nil
 }
 
@@ -94,7 +113,7 @@ func (e *EventStore) eventCollectorRoutine() {
 		select {
 		case <-e.ctx.Done():
 			return
-		case msg := <-e.transport.Messages(messages.EventMessageName):
+		case msg := <-e.transport.Messages(messages.EventV1MessageName):
 			if msg.Error != nil {
 				e.log.WithError(msg.Error).Error("Unable to read events from the transport layer")
 				continue
@@ -102,6 +121,9 @@ func (e *EventStore) eventCollectorRoutine() {
 			evt, ok := msg.Message.(*messages.Event)
 			if !ok {
 				e.log.Error("Unexpected value returned from the transport layer")
+				continue
+			}
+			if !e.isEventSupported(evt) {
 				continue
 			}
 			isNew, err := e.storage.Add(e.ctx, msg.Author, evt)
@@ -124,6 +146,15 @@ func (e *EventStore) eventCollectorRoutine() {
 			}
 		}
 	}
+}
+
+func (e *EventStore) isEventSupported(evt *messages.Event) bool {
+	for _, typ := range e.eventTypes {
+		if typ == evt.Type {
+			return true
+		}
+	}
+	return false
 }
 
 // contextCancelHandler handles context cancellation.

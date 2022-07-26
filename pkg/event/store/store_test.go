@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/chronicleprotocol/oracle-suite/pkg/event/store/memory"
 	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport/local"
@@ -32,13 +31,14 @@ import (
 
 func TestEventStore(t *testing.T) {
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	tra := local.New([]byte("test"), 1, map[string]transport.Message{messages.EventMessageName: (*messages.Event)(nil)})
+	tra := local.New([]byte("test"), 1, map[string]transport.Message{messages.EventV1MessageName: (*messages.Event)(nil)})
 
-	mem := memory.New(time.Minute)
+	mem := NewMemoryStorage(time.Minute)
 	evs, err := New(Config{
-		Storage:   mem,
-		Transport: tra,
-		Log:       null.New(),
+		EventTypes: []string{"test"},
+		Storage:    mem,
+		Transport:  tra,
+		Logger:     null.New(),
 	})
 	require.NoError(t, err)
 
@@ -59,7 +59,7 @@ func TestEventStore(t *testing.T) {
 		Data:        map[string][]byte{"test": []byte("test")},
 		Signatures:  map[string]messages.EventSignature{"sig_key": {Signer: []byte("val"), Signature: []byte("val")}},
 	}
-	require.NoError(t, tra.Broadcast(messages.EventMessageName, event))
+	require.NoError(t, tra.Broadcast(messages.EventV1MessageName, event))
 
 	time.Sleep(100 * time.Millisecond)
 
