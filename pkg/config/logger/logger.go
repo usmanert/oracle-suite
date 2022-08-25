@@ -16,7 +16,6 @@
 package logger
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -30,9 +29,7 @@ import (
 	"github.com/chronicleprotocol/oracle-suite/pkg/log/grafana"
 )
 
-var grafanaLoggerFactory = func(lvl log.Level, cfg grafana.Config) (log.Logger, error) {
-	return grafana.New(context.Background(), lvl, cfg)
-}
+var grafanaLoggerFactory = grafana.New
 
 type Dependencies struct {
 	AppName    string

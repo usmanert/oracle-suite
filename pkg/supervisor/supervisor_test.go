@@ -24,8 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
 )
 
 type service struct {
@@ -46,11 +44,19 @@ func (s *service) Start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		s.mu.Lock()
+		defer s.mu.Unlock()
 		s.started = false
-		s.mu.Unlock()
 		close(s.waitCh)
 	}()
 	return nil
+}
+
+func (s *service) Errors(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := 0; i < n; i++ {
+		s.waitCh <- errors.New("err")
+	}
 }
 
 func (s *service) Wait() chan error {
@@ -65,7 +71,7 @@ func (s *service) Started() bool {
 
 func TestSupervisor_CancelContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := New(ctx, null.New())
+	s := New(nil)
 
 	s1 := &service{waitCh: make(chan error)}
 	s2 := &service{waitCh: make(chan error)}
@@ -73,7 +79,7 @@ func TestSupervisor_CancelContext(t *testing.T) {
 
 	s.Watch(s1, s2, s3)
 
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(ctx))
 	time.Sleep(100 * time.Millisecond)
 
 	assert.True(t, s1.Started())
@@ -97,7 +103,7 @@ func TestSupervisor_CancelContext(t *testing.T) {
 func TestSupervisor_FailToStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := New(ctx, null.New())
+	s := New(nil)
 
 	s1 := &service{waitCh: make(chan error)}
 	s2 := &service{waitCh: make(chan error)}
@@ -105,7 +111,7 @@ func TestSupervisor_FailToStart(t *testing.T) {
 
 	s.Watch(s1, s2, s3)
 
-	require.Error(t, s.Start())
+	require.Error(t, s.Start(ctx))
 	time.Sleep(100 * time.Millisecond)
 
 	assert.False(t, s1.Started())
@@ -116,7 +122,7 @@ func TestSupervisor_FailToStart(t *testing.T) {
 func TestSupervisor_OneFail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := New(ctx, null.New())
+	s := New(nil)
 
 	s1 := &service{waitCh: make(chan error)}
 	s2 := &service{waitCh: make(chan error)}
@@ -124,14 +130,48 @@ func TestSupervisor_OneFail(t *testing.T) {
 
 	s.Watch(s1, s2, s3)
 
-	require.NoError(t, s.Start())
+	require.NoError(t, s.Start(ctx))
 	time.Sleep(100 * time.Millisecond)
 
 	assert.True(t, s1.Started())
 	assert.True(t, s2.Started())
 	assert.True(t, s3.Started())
 
-	s2.waitCh <- errors.New("err")
+	s2.Errors(1)
+	time.Sleep(100 * time.Millisecond)
+
+	select {
+	case err := <-s.Wait():
+		require.Equal(t, "err", err.Error())
+	default:
+		require.Fail(t, "Wait() channel should not be blocked")
+	}
+
+	assert.False(t, s1.Started())
+	assert.False(t, s2.Started())
+	assert.False(t, s3.Started())
+}
+
+func TestSupervisor_MultipleErrors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := New(nil)
+
+	s1 := &service{waitCh: make(chan error)}
+	s2 := &service{waitCh: make(chan error)}
+	s3 := &service{waitCh: make(chan error)}
+
+	s.Watch(s1, s2, s3)
+
+	require.NoError(t, s.Start(ctx))
+	time.Sleep(100 * time.Millisecond)
+
+	assert.True(t, s1.Started())
+	assert.True(t, s2.Started())
+	assert.True(t, s3.Started())
+
+	s2.Errors(3)
+
 	time.Sleep(100 * time.Millisecond)
 
 	select {

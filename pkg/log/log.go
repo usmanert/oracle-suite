@@ -16,6 +16,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -92,4 +93,11 @@ type Logger interface {
 	Warn(args ...interface{})
 	Error(args ...interface{})
 	Panic(args ...interface{})
+}
+
+// LoggerService is a logger that needs to be started to be used.
+type LoggerService interface {
+	Logger
+	Start(ctx context.Context) error
+	Wait() chan error
 }

@@ -98,10 +98,13 @@ func PrepareServices(ctx context.Context, opts *options) (*supervisor.Supervisor
 	if err != nil {
 		return nil, fmt.Errorf(`ghost config error: %w`, err)
 	}
-	sup := supervisor.New(ctx, log)
+	sup := supervisor.New(log)
 	sup.Watch(tra, gho, sysmon.New(time.Minute, log))
 	if g, ok := gof.(supervisor.Service); ok {
 		sup.Watch(g)
+	}
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
 	}
 	return sup, nil
 }

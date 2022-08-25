@@ -76,22 +76,21 @@ type Metric struct {
 	OnDuplicate OnDuplicate
 	// TransformFunc defines the function applied to the value before setting it.
 	TransformFunc func(float64) float64
+	// ParserFunc is going to be applied to transform the value reflection to an actual float64 value
+	ParserFunc func(reflect.Value) (float64, bool)
 }
 
 // New creates a new logger that can extract parameters from log messages and
 // send them to Grafana Cloud using the Graphite endpoint. It starts
 // a background goroutine that will be sending metrics to the Grafana Cloud
 // server as often as described in Config.Interval parameter.
-func New(ctx context.Context, level log.Level, cfg Config) (log.Logger, error) {
-	if ctx == nil {
-		return nil, fmt.Errorf("context is nil")
-	}
+func New(level log.Level, cfg Config) (log.Logger, error) {
 	if cfg.Logger == nil {
 		cfg.Logger = null.New()
 	}
 	l := &logger{
 		shared: &shared{
-			ctx:              ctx,
+			waitCh:           make(chan error),
 			metrics:          cfg.Metrics,
 			logger:           cfg.Logger.WithField("tag", LoggerTag),
 			interval:         cfg.Interval,
@@ -103,7 +102,6 @@ func New(ctx context.Context, level log.Level, cfg Config) (log.Logger, error) {
 		level:  level,
 		fields: log.Fields{},
 	}
-	go l.pushRoutine()
 	return l, nil
 }
 
@@ -114,8 +112,10 @@ type logger struct {
 }
 
 type shared struct {
+	ctx    context.Context
+	waitCh chan error
+
 	mu               sync.Mutex
-	ctx              context.Context
 	logger           log.Logger
 	metrics          []Metric
 	interval         uint
@@ -281,15 +281,6 @@ func (c *logger) collect(msg string, fields log.Fields) {
 		var mv metricValue
 		mk.time = roundTime(time.Now().Unix(), c.interval)
 		mv.value = 1
-		if len(metric.Value) > 0 {
-			mv.value, ok = toFloat(byPath(rfields, metric.Value))
-			if !ok {
-				c.logger.
-					WithField("path", metric.Value).
-					Warn("Invalid path")
-				continue
-			}
-		}
 		mk.name, ok = replaceVars(metric.Name, rfields)
 		if !ok {
 			c.logger.
@@ -307,6 +298,20 @@ func (c *logger) collect(msg string, fields log.Fields) {
 					continue
 				}
 				mv.tags = append(mv.tags, t+"="+rt)
+			}
+		}
+		if len(metric.Value) > 0 {
+			value := byPath(rfields, metric.Value)
+			if metric.ParserFunc != nil {
+				mv.value, ok = metric.ParserFunc(value)
+			} else {
+				mv.value, ok = toFloat(value)
+			}
+			if !ok {
+				c.logger.
+					WithField("path", metric.Value).
+					Warn("Invalid path")
+				continue
 			}
 		}
 		if metric.TransformFunc != nil {
@@ -351,6 +356,8 @@ func (c *logger) addMetricPoint(m Metric, mk metricKey, mv metricValue) {
 
 // pushRoutine pushes metrics in interval defined in c.interval.
 func (c *logger) pushRoutine() {
+	defer c.logger.Info("Stopped")
+	defer close(c.waitCh)
 	defer c.pushMetrics()
 	ticker := time.NewTicker(time.Duration(c.interval) * time.Second)
 	for {
@@ -422,6 +429,25 @@ func (c *logger) pushMetrics() {
 	}
 }
 
+// Start implements the supervisor.Service interface.
+func (c *logger) Start(ctx context.Context) error {
+	c.logger.Info("Starting")
+	if c.ctx != nil {
+		return fmt.Errorf("service can be started only once")
+	}
+	if ctx == nil {
+		return fmt.Errorf("context is nil")
+	}
+	c.ctx = ctx
+	go c.pushRoutine()
+	return nil
+}
+
+// Wait implements the supervisor.Service interface.
+func (c *logger) Wait() chan error {
+	return c.waitCh
+}
+
 // match checks if log message and log fields matches metric definition.
 func match(metric Metric, msg string, fields reflect.Value) bool {
 	for path, rx := range metric.MatchFields {
@@ -434,7 +460,7 @@ func match(metric Metric, msg string, fields reflect.Value) bool {
 }
 
 // varRegexp matches vars in format: ${foo}
-var varRegexp = regexp.MustCompile(`\$\{[^}]+\}`)
+var varRegexp = regexp.MustCompile(`\$\{[^}]+}`)
 
 // replaceVars replaces vars provided as ${field} with values from log fields.
 func replaceVars(s string, fields reflect.Value) (string, bool) {

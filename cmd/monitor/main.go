@@ -16,30 +16,18 @@
 package main
 
 import (
-	"context"
 	"os"
-	"os/signal"
 
-	"github.com/spf13/cobra"
+	suite "github.com/chronicleprotocol/oracle-suite"
 )
 
-func NewRunCmd(opts *options) *cobra.Command {
-	return &cobra.Command{
-		Use:     "run",
-		Args:    cobra.ExactArgs(0),
-		Aliases: []string{"agent"},
-		Short:   "Starts bootstrap node",
-		Long:    ``,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt)
-			sup, err := PrepareSupervisor(ctx, opts)
-			if err != nil {
-				return err
-			}
-			if err = sup.Start(ctx); err != nil {
-				return err
-			}
-			return <-sup.Wait()
-		},
+func main() {
+	opts := options{Version: suite.Version}
+	rootCmd := NewRootCommand(&opts)
+	rootCmd.AddCommand(
+		NewMedianCmd(&opts),
+	)
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
 	}
 }

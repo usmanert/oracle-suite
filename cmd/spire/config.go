@@ -93,8 +93,11 @@ func PrepareAgentServices(ctx context.Context, opts *options) (*supervisor.Super
 	if err != nil {
 		return nil, fmt.Errorf(`spire config error: %w`, err)
 	}
-	sup := supervisor.New(ctx, log)
+	sup := supervisor.New(log)
 	sup.Watch(tra, dat, age, sysmon.New(time.Minute, log))
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
+	}
 	return sup, nil
 }
 
@@ -120,7 +123,10 @@ func PrepareClientServices(ctx context.Context, opts *options) (*supervisor.Supe
 	if err != nil {
 		return nil, nil, fmt.Errorf(`spire config error: %w`, err)
 	}
-	sup := supervisor.New(ctx, log)
+	sup := supervisor.New(log)
 	sup.Watch(cli)
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
+	}
 	return sup, cli, nil
 }

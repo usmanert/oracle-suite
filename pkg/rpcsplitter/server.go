@@ -500,7 +500,6 @@ func (s *server) call(
 	method string,
 	args ...interface{},
 ) error {
-
 	if reflect.TypeOf(result).Kind() != reflect.Ptr {
 		return fmt.Errorf("call result parameter must be pointer")
 	}
@@ -533,7 +532,7 @@ func (s *server) call(
 						WithField("method", method).
 						WithField("args", args).
 						WithField("duration", time.Since(t)).
-						Info("Call")
+						Debug("Call")
 					ch <- res
 				}
 			}()
