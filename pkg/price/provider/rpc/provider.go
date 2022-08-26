@@ -120,6 +120,7 @@ func (g *Provider) Pairs() ([]provider.Pair, error) {
 }
 
 func (g *Provider) contextCancelHandler() {
+	defer func() { close(g.waitCh) }()
 	<-g.ctx.Done()
 	g.waitCh <- g.rpc.Close()
 }
