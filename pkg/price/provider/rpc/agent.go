@@ -109,6 +109,7 @@ func (s *Agent) Wait() chan error {
 }
 
 func (s *Agent) contextCancelHandler() {
+	defer func() { close(s.waitCh) }()
 	defer s.log.Info("Stopped")
 	<-s.ctx.Done()
 	s.waitCh <- s.listener.Close()
