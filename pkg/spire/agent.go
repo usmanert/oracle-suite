@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/rpc"
+	"time"
 
 	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
 	"github.com/chronicleprotocol/oracle-suite/pkg/httpserver"
@@ -31,9 +32,11 @@ import (
 
 const AgentLoggerTag = "SPIRE_AGENT"
 
+// defaultHTTPTimeout is the default timeout for the HTTP server.
+const defaultHTTPTimeout = 3 * time.Second
+
 type Agent struct {
-	ctx    context.Context
-	waitCh chan error
+	ctx context.Context
 
 	srv *httpserver.HTTPServer
 	log log.Logger
@@ -60,9 +63,15 @@ func NewAgent(cfg AgentConfig) (*Agent, error) {
 		return nil, err
 	}
 	return &Agent{
-		waitCh: make(chan error),
-		srv:    httpserver.New(&http.Server{Addr: cfg.Address, Handler: rpcSrv}),
-		log:    logger,
+		srv: httpserver.New(&http.Server{
+			Addr:              cfg.Address,
+			Handler:           rpcSrv,
+			IdleTimeout:       defaultHTTPTimeout,
+			ReadTimeout:       defaultHTTPTimeout,
+			WriteTimeout:      defaultHTTPTimeout,
+			ReadHeaderTimeout: defaultHTTPTimeout,
+		}),
+		log: logger,
 	}, nil
 }
 
@@ -85,11 +94,10 @@ func (s *Agent) Start(ctx context.Context) error {
 
 // Wait waits until agent's context is cancelled.
 func (s *Agent) Wait() chan error {
-	return s.waitCh
+	return s.srv.Wait()
 }
 
 func (s *Agent) contextCancelHandler() {
 	defer s.log.Info("Stopped")
 	<-s.ctx.Done()
-	s.waitCh <- <-s.srv.Wait()
 }
