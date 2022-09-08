@@ -62,9 +62,9 @@ type jsonPrice struct {
 	V       string `json:"v"`
 	R       string `json:"r"`
 	S       string `json:"s"`
-	StarkR  string `json:"stark_r"`
-	StarkS  string `json:"stark_s"`
-	StarkPK string `json:"stark_pk"`
+	StarkR  string `json:"stark_r,omitempty"`
+	StarkS  string `json:"stark_s,omitempty"`
+	StarkPK string `json:"stark_pk,omitempty"`
 }
 
 func (p *Price) SetFloat64Price(price float64) {
@@ -207,7 +207,11 @@ func (p *Price) UnmarshalJSON(bytes []byte) error {
 }
 
 func decodeHexNumber(s string) ([]byte, error) {
-	n, ok := (&big.Int{}).SetString(strings.TrimPrefix(s, "0x"), 16)
+	s = strings.TrimPrefix(s, "0x")
+	if s == "" || s == "0" {
+		return []byte{}, nil // fast path
+	}
+	n, ok := (&big.Int{}).SetString(s, 16)
 	if !ok {
 		return nil, errors.New("unable to parse hex number")
 	}
@@ -215,6 +219,9 @@ func decodeHexNumber(s string) ([]byte, error) {
 }
 
 func encodeHexNumber(b []byte) string {
+	if len(b) == 0 {
+		return "0x0"
+	}
 	n := (&big.Int{}).SetBytes(b)
 	return "0x" + n.Text(16)
 }
