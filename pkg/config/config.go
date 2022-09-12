@@ -16,37 +16,18 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/chronicleprotocol/oracle-suite/pkg/util/interpolate"
 )
 
-func ParseFile(out interface{}, path string) error {
-	p, err := filepath.Abs(path)
-	if err != nil {
-		return err
-	}
-	f, err := os.Open(p)
-	if err != nil {
-		return fmt.Errorf("failed to load JSON config file: %w", err)
-	}
-	defer f.Close()
-	b, err := ioutil.ReadAll(f)
-	if err != nil {
-		return fmt.Errorf("failed to load JSON config file: %w", err)
-	}
-	return Parse(out, b)
-}
-
-func Parse(out interface{}, config []byte) error {
-	err := json.Unmarshal(config, out)
-	if err != nil {
-		return err
-	}
-	return nil
-}
+var getEnv = os.LookupEnv
 
 func LoadFile(fileName string) (b []byte, err error) {
 	f, err := os.Open(fileName)
@@ -57,8 +38,91 @@ func LoadFile(fileName string) (b []byte, err error) {
 		return nil, fmt.Errorf("could not open file %s: %w", fileName, err)
 	}
 	defer func() {
-		err = f.Close()
+		if errClose := f.Close(); err == nil && errClose != nil {
+			err = errClose
+		}
 	}()
 	b, err = ioutil.ReadAll(f)
 	return b, err
+}
+
+// ParseFile parses the given YAML config file from the byte slice and assigns
+// decoded values into the out value.
+func ParseFile(out interface{}, path string) error {
+	p, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		return fmt.Errorf("failed to load JSON config file: %w", err)
+	}
+	defer func() {
+		if errClose := f.Close(); err == nil && errClose != nil {
+			err = errClose
+		}
+	}()
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return fmt.Errorf("failed to load JSON config file: %w", err)
+	}
+	return Parse(out, b)
+}
+
+// Parse parses the given YAML config from the byte slice and assigns decoded
+// values into the out value.
+func Parse(out interface{}, config []byte) error {
+	n := yaml.Node{}
+	if err := yaml.Unmarshal(config, &n); err != nil {
+		return fmt.Errorf("failed to parse YAML config: %w", err)
+	}
+	if err := yamlReplaceEnvVars(&n); err != nil {
+		return fmt.Errorf("failed to parse YAML config: %w", err)
+	}
+	if err := n.Decode(out); err != nil {
+		return fmt.Errorf("failed to parse YAML config: %w", err)
+	}
+	return nil
+}
+
+// yamlReplaceEnvVars replaces recursively all environment variables in the
+// given YAML node.
+func yamlReplaceEnvVars(n *yaml.Node) error {
+	return yamlVisitScalarNodes(n, func(n *yaml.Node) error {
+		var err error
+		parsed := interpolate.Parse(n.Value)
+		if parsed.HasVars() {
+			n.Value = parsed.Interpolate(func(key string) string {
+				if !strings.HasPrefix(key, "ENV:") {
+					err = fmt.Errorf("environment variable %s is not prefixed with ENV", key)
+					return ""
+				}
+				env, ok := getEnv(key[4:])
+				if !ok {
+					err = fmt.Errorf("environment variable %s not set", key[4:])
+					return ""
+				}
+				return env
+			})
+			// Removing the style and tag will make the YAML decoder more
+			// forgiving. Otherwise, it will complain about type mismatches.
+			n.Style = 0
+			n.Tag = ""
+		}
+		return err
+	})
+}
+
+func yamlVisitScalarNodes(n *yaml.Node, fn func(n *yaml.Node) error) error {
+	switch n.Kind {
+	default:
+		for _, c := range n.Content {
+			if err := yamlVisitScalarNodes(c, fn); err != nil {
+				return err
+			}
+		}
+	case yaml.ScalarNode:
+		return fn(n)
+	}
+	return nil
 }
