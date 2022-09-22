@@ -828,7 +828,7 @@
   "lair": {
     "listenAddr": "${CFG_LAIR_LISTEN_ADDR-127.0.0.1:8082}",
     "storage": {
-      "type": "${CFG_LAIR_STORAGE_-redis}",
+      "type": "${CFG_LAIR_STORAGE-redis}",
       "redis": {
         "address": "${CFG_LAIR_REDIS_ADDR-127.0.0.1:7001}",
         "password": "${CFG_LAIR_PASS-password}",
