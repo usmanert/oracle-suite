@@ -228,7 +228,7 @@
         "type": "openexchangerates",
         "name": "openexchangerates",
         "params": {
-          "apiKey": "${CFG_OPENEXCHANGERATES_KEY-}",
+          "apiKey": "${CFG_OPENEXCHANGERATES_KEY-}"
         }
       },
       "uniswap": {
@@ -828,11 +828,17 @@
   "lair": {
     "listenAddr": "${CFG_LAIR_LISTEN_ADDR-127.0.0.1:8082}",
     "storage": {
-      "type": "${CFG_LAIR_STORAGE-redis}",
+      "type": "${CFG_LAIR_STORAGE-memory}",
       "redis": {
-        "address": "${CFG_LAIR_REDIS_ADDR-127.0.0.1:7001}",
-        "password": "${CFG_LAIR_PASS-password}",
-        "db": "${CFG_LAIR_REDIS_DB-0}"
+        "address": "${CFG_LAIR_REDIS_ADDR-127.0.0.1:6379}",
+        "password": "${CFG_LAIR_PASS-}",
+        "db": "${CFG_LAIR_REDIS_DB-0}",
+        "tls": "${CFG_LAIR_REDIS_TLS-false}",
+        "tlsServerName": "${CFG_LAIR_REDIS_TLS_SERVER_NAME-}",
+        "tlsCertFile": "${CFG_LAIR_REDIS_TLS_CERT_FILE-}",
+        "tlsKeyFile": "${CFG_LAIR_REDIS_TLS_KEY_FILE-}",
+        "tlsRootCAFile": "${CFG_LAIR_REDIS_TLS_ROOT_CA_FILE-}",
+        "tlsInsecureSkipVerify": "${CFG_LAIR_REDIS_TLS_INSECURE-false}"
       }
     }
   }

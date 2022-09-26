@@ -18,8 +18,11 @@ package redis
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -53,19 +56,61 @@ type Config struct {
 	TTL time.Duration
 	// Address specifies Redis server address as "host:port".
 	Address string
+	// Username specifies Redis username for the ACL.
+	Username string
 	// Password specifies Redis server password.
 	Password string
 	// DB is the Redis database number.
 	DB int
+	// TLS specifies whether to use TLS for Redis connection.
+	TLS bool
+	// TLSServerName specifies the server name used to verify
+	// the hostname on the returned certificates from the server.
+	TLSServerName string
+	// TLSCertFile specifies the path to the client certificate file.
+	TLSCertFile string
+	// TLSKeyFile specifies the path to the client key file.
+	TLSKeyFile string
+	// TLSRootCAFile specifies the path to the CA certificate file.
+	TLSRootCAFile string
+	// TLSInsecureSkipVerify specifies whether to skip server certificate verification.
+	TLSInsecureSkipVerify bool
 }
 
 // NewRedisStorage returns a new instance of Redis.
 func NewRedisStorage(cfg Config) (*Storage, error) {
-	cli := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     cfg.Address,
+		Username: cfg.Username,
 		Password: cfg.Password,
 		DB:       cfg.DB,
-	})
+	}
+	if cfg.TLS {
+		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		if cfg.TLSInsecureSkipVerify {
+			opts.TLSConfig.InsecureSkipVerify = true
+		}
+		if cfg.TLSServerName != "" {
+			opts.TLSConfig.ServerName = cfg.TLSServerName
+		}
+		if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+			cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+			if err != nil {
+				return nil, err
+			}
+			opts.TLSConfig.Certificates = []tls.Certificate{cert}
+		}
+		if cfg.TLSRootCAFile != "" {
+			caCert, err := os.ReadFile(cfg.TLSRootCAFile)
+			if err != nil {
+				return nil, err
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			opts.TLSConfig.RootCAs = caCertPool
+		}
+	}
+	cli := redis.NewClient(opts)
 	// go-redis default timeout is 5 seconds, so using background context should be ok
 	res := cli.Ping(context.Background())
 	if res.Err() != nil {
