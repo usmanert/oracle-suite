@@ -25,19 +25,19 @@ const AddressLength = 20
 type Address [AddressLength]byte
 
 // HexToAddress parses a hex string into an Address.
-func HexToAddress(address string) Address {
+func HexToAddress(hex string) Address {
 	a := Address{}
-	_ = a.UnmarshalText([]byte(address))
+	_ = fixedBytesUnmarshalText([]byte(hex), a[:])
 	return a
 }
 
 // BytesToAddress returns an Address from a byte slice.
-func BytesToAddress(b []byte) Address {
+func BytesToAddress(bts []byte) Address {
 	var a Address
-	if len(b) > len(a) {
-		b = b[len(b)-AddressLength:]
+	if len(bts) > len(a) {
+		return a
 	}
-	copy(a[AddressLength-len(b):], b)
+	copy(a[AddressLength-len(bts):], bts)
 	return a
 }
 

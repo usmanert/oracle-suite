@@ -32,9 +32,14 @@ func (c *Client) BlockNumber(ctx context.Context) (uint64, error) {
 	return args.Get(0).(uint64), args.Error(1)
 }
 
-func (c *Client) BlockByNumber(ctx context.Context, number types.BlockNumber, full bool) (any, error) {
-	args := c.Called(ctx, number, full)
-	return args.Get(0), args.Error(1)
+func (c *Client) BlockByNumber(ctx context.Context, number types.BlockNumber) (*types.BlockTxHashes, error) {
+	args := c.Called(ctx, number)
+	return args.Get(0).(*types.BlockTxHashes), args.Error(1)
+}
+
+func (c *Client) FullBlockByNumber(ctx context.Context, number types.BlockNumber) (*types.BlockTxObjects, error) {
+	args := c.Called(ctx, number)
+	return args.Get(0).(*types.BlockTxObjects), args.Error(1)
 }
 
 func (c *Client) GetTransactionCount(ctx context.Context, acc types.Address, block types.BlockNumber) (uint64, error) {

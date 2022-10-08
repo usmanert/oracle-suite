@@ -53,16 +53,18 @@ func (c *Client) BlockNumber(ctx context.Context) (uint64, error) {
 // TODO: eth_getBlockByHash
 
 // BlockByNumber implements the ethereumv2.Client.
-func (c *Client) BlockByNumber(ctx context.Context, number types.BlockNumber, full bool) (any, error) {
-	if full {
-		var block *types.BlockTxObjects
-		if err := c.rpc.CallContext(ctx, &block, "eth_getBlockByNumber", number, full); err != nil {
-			return nil, err
-		}
-		return block, nil
-	}
+func (c *Client) BlockByNumber(ctx context.Context, number types.BlockNumber) (*types.BlockTxHashes, error) {
 	var block *types.BlockTxHashes
-	if err := c.rpc.CallContext(ctx, &block, "eth_getBlockByNumber", number, full); err != nil {
+	if err := c.rpc.CallContext(ctx, &block, "eth_getBlockByNumber", number, false); err != nil {
+		return nil, err
+	}
+	return block, nil
+}
+
+// FullBlockByNumber implements the ethereumv2.Client.
+func (c *Client) FullBlockByNumber(ctx context.Context, number types.BlockNumber) (*types.BlockTxObjects, error) {
+	var block *types.BlockTxObjects
+	if err := c.rpc.CallContext(ctx, &block, "eth_getBlockByNumber", number, true); err != nil {
 		return nil, err
 	}
 	return block, nil

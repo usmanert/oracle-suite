@@ -21,7 +21,7 @@ type Bytes []byte
 // HexToBytes parses a hex string into a Bytes.
 func HexToBytes(hex string) Bytes {
 	b := Bytes{}
-	_ = b.UnmarshalText([]byte(hex))
+	_ = bytesUnmarshalText([]byte(hex), (*[]byte)(&b))
 	return b
 }
 

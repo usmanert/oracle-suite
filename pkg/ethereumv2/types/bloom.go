@@ -20,13 +20,17 @@ const BloomLength = 256
 // Bloom represents a 2048 bit bloom filter.
 type Bloom [BloomLength]byte
 
-func (t *Bloom) SetBytes(b []byte) {
-	if len(b) > len(t) {
-		b = b[len(b)-BloomLength:]
+// BytesToBloom converts a byte slice to a Bloom.
+func BytesToBloom(bts []byte) Bloom {
+	var b Bloom
+	if len(bts) > len(b) {
+		return b
 	}
-	copy(t[BloomLength-len(b):], b)
+	copy(b[BloomLength-len(bts):], bts)
+	return b
 }
 
+// String returns the hex string representation of the bloom.
 func (t *Bloom) String() string {
 	if t == nil {
 		return ""
@@ -34,18 +38,22 @@ func (t *Bloom) String() string {
 	return string(bytesToHex(t[:]))
 }
 
+// MarshalJSON implements the json.Marshaler interface.
 func (t Bloom) MarshalJSON() ([]byte, error) {
 	return bytesMarshalJSON(t[:]), nil
 }
 
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (t *Bloom) UnmarshalJSON(input []byte) error {
 	return fixedBytesUnmarshalJSON(input, t[:])
 }
 
+// MarshalText implements the encoding.TextMarshaler interface.
 func (t Bloom) MarshalText() ([]byte, error) {
 	return bytesMarshalText(t[:]), nil
 }
 
+// UnmarshalText implements the encoding.TextUnmarshaler interface.
 func (t *Bloom) UnmarshalText(input []byte) error {
 	return fixedBytesUnmarshalText(input, t[:])
 }

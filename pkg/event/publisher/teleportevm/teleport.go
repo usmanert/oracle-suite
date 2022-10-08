@@ -287,7 +287,7 @@ func (ep *EventProvider) getBlockTimestamp(ctx context.Context, block uint64) (t
 	retry.TryForever(
 		ctx,
 		func() error {
-			res, err = ep.client.BlockByNumber(ctx, types.Uint64ToBlockNumber(block), false)
+			res, err = ep.client.BlockByNumber(ctx, types.Uint64ToBlockNumber(block))
 			if err != nil {
 				ep.log.WithError(err).Error("Unable to get block timestamp")
 			}

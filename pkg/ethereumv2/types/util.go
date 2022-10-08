@@ -20,8 +20,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-
-	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 // bytesMarshalJSON encodes the given bytes as a JSON string where each byte is
@@ -118,20 +116,40 @@ func numberUnmarshalText(input []byte, output *big.Int) error {
 // bigIntToHex returns the hex representation of the given big integer.
 // The hex string is prefixed with "0x". Negative numbers are prefixed with
 // "-0x".
-func bigIntToHex(u *big.Int) []byte {
-	return []byte(hexutil.EncodeBig(u))
+func bigIntToHex(x *big.Int) []byte {
+	if sign := x.Sign(); sign == 0 {
+		return []byte("0x0")
+	} else if sign > 0 {
+		return []byte("0x" + x.Text(16))
+	} else {
+		return []byte("-0x" + x.Text(16)[1:])
+	}
 }
 
 // hexToBigInt returns the big integer representation of the given hex string.
 // The hex string may be prefixed with "0x".
 func hexToBigInt(h []byte) (*big.Int, error) {
-	if !has0xPrefix(h) {
-		h = append([]byte("0x"), h...)
-	}
 	if bytes.Equal(h, []byte("0x0")) {
 		return big.NewInt(0), nil
 	}
-	return hexutil.DecodeBig(string(h))
+	isNeg := len(h) > 1 && h[0] == '-'
+	if isNeg {
+		h = h[1:]
+	}
+	if has0xPrefix(h) {
+		h = h[2:]
+	}
+	if len(h) == 0 {
+		return nil, fmt.Errorf("empty hex string")
+	}
+	x, ok := new(big.Int).SetString(string(h), 16)
+	if !ok {
+		return nil, fmt.Errorf("invalid hex string")
+	}
+	if isNeg {
+		x.Neg(x)
+	}
+	return x, nil
 }
 
 // bytesToHex returns the hex representation of the given bytes. The hex string

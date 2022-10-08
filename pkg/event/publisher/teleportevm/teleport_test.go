@@ -116,9 +116,9 @@ func Test_teleportEventProvider_PrefetchEventsRoutine(t *testing.T) {
 	}
 
 	now := time.Now().Unix()
-	cli.On("BlockByNumber", mock.Anything, types.Uint64ToBlockNumber(99), false).Return(dummyBlock(99, now), nil)
-	cli.On("BlockByNumber", mock.Anything, types.Uint64ToBlockNumber(84), false).Return(dummyBlock(84, now-80), nil)
-	cli.On("BlockByNumber", mock.Anything, types.Uint64ToBlockNumber(69), false).Return(dummyBlock(69, now-160), nil)
+	cli.On("BlockByNumber", mock.Anything, types.Uint64ToBlockNumber(99)).Return(dummyBlock(99, now), nil)
+	cli.On("BlockByNumber", mock.Anything, types.Uint64ToBlockNumber(84)).Return(dummyBlock(84, now-80), nil)
+	cli.On("BlockByNumber", mock.Anything, types.Uint64ToBlockNumber(69)).Return(dummyBlock(69, now-160), nil)
 	cli.On("BlockNumber", ctx).Return(uint64(100), nil).Once()
 	cli.On("FilterLogs", ctx, mock.Anything).Return([]types.Log{}, nil).Once().Run(func(args mock.Arguments) {
 		fq := args.Get(1).(types.FilterLogsQuery)

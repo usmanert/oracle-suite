@@ -20,11 +20,17 @@ const NonceLength = 8
 // Nonce represents a 64 bit nonce.
 type Nonce [NonceLength]byte
 
+func HexToNonce(hex string) Nonce {
+	var n Nonce
+	_ = fixedBytesUnmarshalText([]byte(hex), n[:])
+	return n
+}
+
 // BytesToNonce converts a byte slice to a Nonce.
 func BytesToNonce(b []byte) Nonce {
 	var n Nonce
 	if len(b) > len(n) {
-		b = b[len(b)-NonceLength:]
+		return n
 	}
 	copy(n[NonceLength-len(b):], b)
 	return n

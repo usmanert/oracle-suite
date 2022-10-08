@@ -24,29 +24,29 @@ const HashLength = 32
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte
 
-func HexToHash(s string) Hash {
+// HexToHash returns the hash corresponding to the hexadecimal string.
+func HexToHash(hex string) Hash {
 	h := Hash{}
-	_ = h.UnmarshalText([]byte(s))
+	_ = fixedBytesUnmarshalText([]byte(hex), h[:])
 	return h
 }
 
-func BytesToHash(b []byte) Hash {
+// BytesToHash returns the hash corresponding to the byte slice.
+func BytesToHash(bts []byte) Hash {
 	var h Hash
-	h.SetBytes(b)
+	if len(bts) > len(h) {
+		return h
+	}
+	copy(h[HashLength-len(bts):], bts)
 	return h
 }
 
+// Bytes returns the byte representation of the hash.
 func (t *Hash) Bytes() []byte {
 	return t[:]
 }
 
-func (t *Hash) SetBytes(b []byte) {
-	if len(b) > len(t) {
-		b = b[len(b)-HashLength:]
-	}
-	copy(t[HashLength-len(b):], b)
-}
-
+// String returns the hex string representation of the hash.
 func (t *Hash) String() string {
 	if t == nil {
 		return ""
@@ -77,6 +77,7 @@ func (t *Hash) UnmarshalText(input []byte) error {
 // Hashes marshals/unmarshals as hash.
 type Hashes []Hash
 
+// HexToHashes returns the hashes corresponding to the hexadecimal strings.
 func HexToHashes(hashes ...string) Hashes {
 	h := make([]Hash, len(hashes))
 	for i, v := range hashes {
