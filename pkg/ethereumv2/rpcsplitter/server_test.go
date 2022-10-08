@@ -1390,6 +1390,14 @@ func Test_RPC_Timeout(t *testing.T) {
 	})
 }
 
+func newAny(j string) *Any {
+	t := &Any{}
+	if err := t.UnmarshalJSON([]byte(j)); err != nil {
+		return nil
+	}
+	return t
+}
+
 func ptr[T any](v T) *T {
 	return &v
 }

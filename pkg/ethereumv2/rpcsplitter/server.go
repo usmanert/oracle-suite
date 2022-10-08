@@ -433,7 +433,7 @@ func (r *rpcETHAPI) MaxPriorityFeePerGas() (any, error) {
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcETHAPI) ChainId() (any, error) { //nolint:revive
+func (r *rpcETHAPI) ChainId() (any, error) { //nolint:revive,stylecheck
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -594,14 +594,6 @@ func isNil(v any) bool {
 // Any stores an argument in its raw form, and it is passed to the RPC server
 // unmodified.
 type Any struct{ j any }
-
-func newAny(j string) *Any {
-	t := &Any{}
-	if err := t.UnmarshalJSON([]byte(j)); err != nil {
-		return nil
-	}
-	return t
-}
 
 // MarshalJSON implements the json.Marshaler interface.
 func (t Any) MarshalJSON() ([]byte, error) {
