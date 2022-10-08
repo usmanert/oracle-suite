@@ -122,7 +122,7 @@ func bigIntToHex(x *big.Int) []byte {
 	case sign == 0:
 		return []byte("0x0")
 	case sign > 0:
-		return bytesToHex(x.Bytes())
+		return []byte("0x" + x.Text(16))
 	default:
 		return []byte("-0x" + x.Text(16)[1:])
 	}
