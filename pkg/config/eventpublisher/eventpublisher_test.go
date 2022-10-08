@@ -19,12 +19,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
 	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum/geth"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/types"
 	"github.com/chronicleprotocol/oracle-suite/pkg/event/publisher"
 	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport/local"
@@ -45,7 +45,7 @@ func TestEventPublisher_Configure_Teleport(t *testing.T) {
 		PrefetchPeriod: 1,
 		BlockLimit:     1,
 		ReplayAfter:    []int64{1},
-		Addresses:      []common.Address{common.HexToAddress("0x07a35a1d4b751a818d93aa38e615c0df23064881")},
+		Addresses:      []types.Address{types.HexToAddress("0x07a35a1d4b751a818d93aa38e615c0df23064881")},
 	}}}}
 
 	eventPublisherFactory = func(cfg publisher.Config) (*publisher.EventPublisher, error) {

@@ -22,7 +22,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/rpcclient"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/types"
 
 	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
 	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
@@ -56,7 +57,7 @@ type teleportEVMListener struct {
 	BlockConfirmations int64                   `yaml:"blockConfirmations"`
 	BlockLimit         int                     `yaml:"blockLimit"`
 	ReplayAfter        []int64                 `yaml:"replayAfter"`
-	Addresses          []common.Address        `yaml:"addresses"`
+	Addresses          []types.Address         `yaml:"addresses"`
 }
 
 type teleportStarknetListener struct {
@@ -192,12 +193,12 @@ func (c *EventPublisher) configureTeleportStarknet(lis *[]publisher.EventProvide
 	return nil
 }
 
-type ethClients map[string]ethereum.Client
+type ethClients map[string]*rpcclient.Client
 
 // configure returns an Ethereum client for given configuration.
 // It will return the same instance of the client for the same
 // configuration.
-func (m ethClients) configure(ethereum ethereumConfig.Ethereum, logger log.Logger) (ethereum.Client, error) {
+func (m ethClients) configure(ethereum ethereumConfig.Ethereum, logger log.Logger) (*rpcclient.Client, error) {
 	key, err := json.Marshal(ethereum)
 	if err != nil {
 		return nil, err
@@ -205,10 +206,11 @@ func (m ethClients) configure(ethereum ethereumConfig.Ethereum, logger log.Logge
 	if c, ok := m[string(key)]; ok {
 		return c, nil
 	}
-	c, err := ethereum.ConfigureEthereumClient(nil, logger)
+	c, err := ethereum.ConfigureRPCClient(logger)
 	if err != nil {
 		return nil, err
 	}
-	m[string(key)] = c
-	return c, nil
+	r := rpcclient.New(c)
+	m[string(key)] = r
+	return r, nil
 }

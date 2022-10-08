@@ -18,14 +18,11 @@ package teleportevm
 import (
 	"context"
 	"errors"
-	"math/big"
 	"time"
 
-	geth "github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/types"
 
-	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
 	"github.com/chronicleprotocol/oracle-suite/pkg/log"
 	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
@@ -40,14 +37,14 @@ const LoggerTag = "ETHEREUM_TELEPORT"
 const retryInterval = 5 * time.Second
 
 // teleportTopic0 is Keccak256("TeleportInitialized((bytes32,bytes32,bytes32,bytes32,uint128,uint80,uint48))")
-var teleportTopic0 = ethereum.HexToHash("0x61aedca97129bac4264ec6356bd1f66431e65ab80e2d07b7983647d72776f545")
+var teleportTopic0 = types.HexToHash("0x61aedca97129bac4264ec6356bd1f66431e65ab80e2d07b7983647d72776f545")
 
 // Config contains a configuration options for EventProvider.
 type Config struct {
 	// Client is an instance of Ethereum RPC client.
-	Client ethereum.Client
+	Client ethereumv2.Client
 	// Addresses is a list of contracts from which logs will be fetched.
-	Addresses []ethereum.Address
+	Addresses []types.Address
 	// Interval specifies how often provider should check for new logs.
 	Interval time.Duration
 	// PrefetchPeriod specifies how far back in time provider should prefetch
@@ -82,8 +79,8 @@ type EventProvider struct {
 	eventCh chan *messages.Event
 
 	// Configuration parameters copied from Config:
-	client         ethereum.Client
-	addresses      []common.Address
+	client         ethereumv2.Client
+	addresses      []types.Address
 	interval       time.Duration
 	prefetchPeriod time.Duration
 	blockLimit     uint64
@@ -260,19 +257,22 @@ func (ep *EventProvider) handleEvents(ctx context.Context, from, to uint64) {
 // value.
 func (ep *EventProvider) getBlockNumber(ctx context.Context) (uint64, bool) {
 	var err error
-	var res *big.Int
+	var res uint64
 	retry.TryForever(
 		ctx,
 		func() error {
 			res, err = ep.client.BlockNumber(ctx)
+			if err != nil {
+				ep.log.WithError(err).Error("Unable to get block number")
+			}
 			return err
 		},
 		retryInterval,
 	)
-	if res == nil || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return 0, false
 	}
-	return res.Uint64(), true
+	return res, true
 }
 
 // getBlockNumber returns the latest block number on the blockchain.
@@ -283,11 +283,14 @@ func (ep *EventProvider) getBlockNumber(ctx context.Context) (uint64, bool) {
 // value.
 func (ep *EventProvider) getBlockTimestamp(ctx context.Context, block uint64) (time.Time, bool) {
 	var err error
-	var res *types.Block
+	var res any
 	retry.TryForever(
 		ctx,
 		func() error {
-			res, err = ep.client.Block(ethereum.WithBlockNumber(ctx, new(big.Int).SetUint64(block)))
+			res, err = ep.client.BlockByNumber(ctx, types.Uint64ToBlockNumber(block), false)
+			if err != nil {
+				ep.log.WithError(err).Error("Unable to get block timestamp")
+			}
 			return err
 		},
 		retryInterval,
@@ -295,7 +298,11 @@ func (ep *EventProvider) getBlockTimestamp(ctx context.Context, block uint64) (t
 	if res == nil || ctx.Err() != nil {
 		return time.Time{}, false
 	}
-	return time.Unix(int64(res.Time()), 0), true
+	if res, ok := res.(*types.BlockTxHashes); ok {
+		return time.Unix(res.Timestamp.Big().Int64(), 0), true
+	}
+	ep.log.Panic("BlockByNumber returned unexpected type")
+	return time.Time{}, true
 }
 
 // filterLogs fetches TeleportGUID events from the blockchain.
@@ -306,9 +313,9 @@ func (ep *EventProvider) getBlockTimestamp(ctx context.Context, block uint64) (t
 // value.
 func (ep *EventProvider) filterLogs(
 	ctx context.Context,
-	addr common.Address,
+	addr types.Address,
 	from, to uint64,
-	topic0 common.Hash,
+	topic0 types.Hash,
 ) ([]types.Log, bool) {
 
 	var err error
@@ -316,12 +323,17 @@ func (ep *EventProvider) filterLogs(
 	retry.TryForever(
 		ctx,
 		func() error {
-			res, err = ep.client.FilterLogs(ctx, geth.FilterQuery{
-				FromBlock: new(big.Int).SetUint64(from),
-				ToBlock:   new(big.Int).SetUint64(to),
-				Addresses: []common.Address{addr},
-				Topics:    [][]common.Hash{{topic0}},
+			fromBlockNumber := types.Uint64ToBlockNumber(from)
+			toBlockNumber := types.Uint64ToBlockNumber(to)
+			res, err = ep.client.FilterLogs(ctx, types.FilterLogsQuery{
+				FromBlock: &fromBlockNumber,
+				ToBlock:   &toBlockNumber,
+				Address:   types.Addresses{addr},
+				Topics:    []types.Hashes{{topic0}},
 			})
+			if err != nil {
+				ep.log.WithError(err).Error("Unable to filter logs")
+			}
 			return err
 		},
 		retryInterval,

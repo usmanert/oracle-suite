@@ -22,12 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type testComparable struct{ v interface{} }
-type testStruct struct{ V interface{} }
-
-func (t *testComparable) Compare(v interface{}) bool {
-	return true
-}
+type testStruct struct{ V any }
 
 func Test_compare(t *testing.T) {
 	testSlice := []int{1}
@@ -35,8 +30,8 @@ func Test_compare(t *testing.T) {
 	testVar := 1
 	testVarPtr := &testVar
 	tests := []struct {
-		a     interface{}
-		b     interface{}
+		a     any
+		b     any
 		equal bool
 	}{
 		// Int
@@ -82,8 +77,6 @@ func Test_compare(t *testing.T) {
 		// Struct
 		{a: testStruct{V: 1}, b: testStruct{V: 1}, equal: true},
 		{a: testStruct{V: 1}, b: testStruct{V: 2}, equal: false},
-		// Compare method
-		{a: testComparable{v: 1}, b: testComparable{v: 2}, equal: true},
 	}
 	for n, tt := range tests {
 		t.Run(fmt.Sprintf("case-%d", n+1), func(t *testing.T) {

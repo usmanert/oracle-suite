@@ -19,27 +19,15 @@ import (
 	"reflect"
 )
 
-// comparable works with the compare method. If this interface is implemented,
-// then the compare function will be used to compare values. The method
-// will always be invoked on a pointer receiver, and the v argument will
-// always be given as a pointer.
-type comparable interface {
-	// Compare returns true if the v arg is the same as a receiver.
-	Compare(v interface{}) bool
-}
-
 // compare reports if two values are deeply equal. This function is similar to
 // reflect.DeepEqual but it ignores pointers (comparing a value with the same
-// value passed as a pointer will return true) and it will use a custom method
-// for comparison if the value implements the comparable interface.
+// value passed as a pointer will return true).
 //
 // If a structure contains unexported fields, compare will always return false.
-// To properly handle those structures, the comparable interface needs to be
-// implemented.
 //
 // This function DOES NOT work with recursive data structures!
 //nolint:funlen,gocyclo
-func compare(a, b interface{}) bool {
+func compare(a, b any) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -59,11 +47,6 @@ func compare(a, b interface{}) bool {
 		}
 		if a.Type() != b.Type() {
 			return false
-		}
-		if a.CanInterface() {
-			if c, ok := ptr(a).Interface().(comparable); ok {
-				return c.Compare(ptr(b).Interface())
-			}
 		}
 		switch a.Kind() {
 		case reflect.Array:
@@ -108,6 +91,18 @@ func compare(a, b interface{}) bool {
 				}
 			}
 			return true
+		case reflect.String:
+			return a.String() == b.String()
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			return a.Int() == b.Int()
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			return a.Uint() == b.Uint()
+		case reflect.Float32, reflect.Float64:
+			return a.Float() == b.Float()
+		case reflect.Complex64, reflect.Complex128:
+			return a.Complex() == b.Complex()
+		case reflect.Bool:
+			return a.Bool() == b.Bool()
 		default:
 			if a.CanInterface() && a.Type().Comparable() {
 				return a.Interface() == b.Interface()
@@ -116,12 +111,4 @@ func compare(a, b interface{}) bool {
 		}
 	}
 	return cmp(reflect.ValueOf(a), reflect.ValueOf(b))
-}
-
-// ptr returns a pointer to a given value.
-func ptr(v reflect.Value) reflect.Value {
-	pt := reflect.PtrTo(v.Type())
-	pv := reflect.New(pt.Elem())
-	pv.Elem().Set(v)
-	return pv
 }
