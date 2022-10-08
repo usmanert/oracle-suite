@@ -117,11 +117,13 @@ func numberUnmarshalText(input []byte, output *big.Int) error {
 // The hex string is prefixed with "0x". Negative numbers are prefixed with
 // "-0x".
 func bigIntToHex(x *big.Int) []byte {
-	if sign := x.Sign(); sign == 0 {
+	sign := x.Sign()
+	switch {
+	case sign == 0:
 		return []byte("0x0")
-	} else if sign > 0 {
-		return []byte("0x" + x.Text(16))
-	} else {
+	case sign > 0:
+		return bytesToHex(x.Bytes())
+	default:
 		return []byte("-0x" + x.Text(16)[1:])
 	}
 }
