@@ -102,9 +102,9 @@ func (r *gasValueResolver) resolve(resps []any) (any, error) {
 		a := ns[0].Big()
 		b := ns[1].Big()
 		if a.Cmp(b) > 0 {
-			return bigToNumberToPtr(b), nil
+			return bigToNumberPtr(b), nil
 		}
-		return bigToNumberToPtr(a), nil
+		return bigToNumberPtr(a), nil
 	}
 	// Calculate the median.
 	sort.Slice(ns, func(i, j int) bool {
@@ -114,7 +114,7 @@ func (r *gasValueResolver) resolve(resps []any) (any, error) {
 		m := len(ns) / 2
 		bx := ns[m-1].Big()
 		by := ns[m].Big()
-		return bigToNumberToPtr(new(big.Int).Div(new(big.Int).Add(bx, by), big.NewInt(2))), nil
+		return bigToNumberPtr(new(big.Int).Div(new(big.Int).Add(bx, by), big.NewInt(2))), nil
 	}
 	return ns[len(ns)/2], nil
 }
@@ -154,7 +154,7 @@ func (r *blockNumberResolver) resolve(resps []any) (any, error) {
 			block = nb
 		}
 	}
-	return bigToNumberToPtr(block), nil
+	return bigToNumberPtr(block), nil
 }
 
 func filterByNumberType(resps []any) (s []*types.Number) {
@@ -166,7 +166,7 @@ func filterByNumberType(resps []any) (s []*types.Number) {
 	return
 }
 
-func bigToNumberToPtr(x *big.Int) *types.Number {
+func bigToNumberPtr(x *big.Int) *types.Number {
 	n := types.BigToNumber(x)
 	return &n
 }
