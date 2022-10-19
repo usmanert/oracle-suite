@@ -22,62 +22,64 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/types"
 )
 
 func Test_defaultResolver_resolve(t *testing.T) {
 	tests := []struct {
-		resps        []interface{}
+		resps        []any
 		minResponses int
-		want         interface{}
+		want         any
 		wantErr      bool
 	}{
 		{
-			resps:        []interface{}{newJSON(`"a"`)},
+			resps:        []any{newAny(`"a"`)},
 			minResponses: 1,
-			want:         newJSON(`"a"`),
+			want:         newAny(`"a"`),
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), newJSON(`"a"`), newJSON(`"b"`)},
+			resps:        []any{newAny(`"a"`), newAny(`"a"`), newAny(`"b"`)},
 			minResponses: 1,
-			want:         newJSON(`"a"`),
+			want:         newAny(`"a"`),
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), newJSON(`"a"`), newJSON(`"b"`)},
+			resps:        []any{newAny(`"a"`), newAny(`"a"`), newAny(`"b"`)},
 			minResponses: 2,
-			want:         newJSON(`"a"`),
+			want:         newAny(`"a"`),
 		},
 		{
-			resps:        []interface{}{newJSON(`"b"`), newJSON(`"a"`), newJSON(`"a"`)},
+			resps:        []any{newAny(`"b"`), newAny(`"a"`), newAny(`"a"`)},
 			minResponses: 2,
-			want:         newJSON(`"a"`),
+			want:         newAny(`"a"`),
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), errors.New("err")},
+			resps:        []any{newAny(`"a"`), errors.New("err")},
 			minResponses: 1,
-			want:         newJSON(`"a"`),
+			want:         newAny(`"a"`),
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), newJSON(`"a"`), errors.New("err"), errors.New("err")},
+			resps:        []any{newAny(`"a"`), newAny(`"a"`), errors.New("err"), errors.New("err")},
 			minResponses: 2,
-			want:         newJSON(`"a"`),
+			want:         newAny(`"a"`),
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), newJSON(`"a"`), errors.New("err")},
+			resps:        []any{newAny(`"a"`), newAny(`"a"`), errors.New("err")},
 			minResponses: 3,
 			wantErr:      true,
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), newJSON(`"b"`)},
+			resps:        []any{newAny(`"a"`), newAny(`"b"`)},
 			minResponses: 1,
 			wantErr:      true,
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), newJSON(`"a"`), newJSON(`"b"`), newJSON(`"b"`)},
+			resps:        []any{newAny(`"a"`), newAny(`"a"`), newAny(`"b"`), newAny(`"b"`)},
 			minResponses: 2,
 			wantErr:      true,
 		},
 		{
-			resps:        []interface{}{newJSON(`"a"`), newJSON(`"a"`), errors.New("err")},
+			resps:        []any{newAny(`"a"`), newAny(`"a"`), errors.New("err")},
 			minResponses: 3,
 			wantErr:      true,
 		},
@@ -97,53 +99,53 @@ func Test_defaultResolver_resolve(t *testing.T) {
 
 func Test_gasValueResolver_resolve(t *testing.T) {
 	tests := []struct {
-		resps        []interface{}
+		resps        []any
 		minResponses int
-		want         interface{}
+		want         any
 		wantErr      bool
 	}{
 		{
-			resps:        []interface{}{newNumber(`0x1`)},
+			resps:        []any{hexToNumberPtr(`0x1`)},
 			minResponses: 1,
-			want:         newNumber(`0x1`),
+			want:         hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x1`), newNumber(`0x2`)},
+			resps:        []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`)},
 			minResponses: 1,
-			want:         newNumber(`0x1`),
+			want:         hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x1`), newNumber(`0x2`)},
+			resps:        []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`)},
 			minResponses: 2,
-			want:         newNumber(`0x1`),
+			want:         hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x2`), newNumber(`0x1`)},
+			resps:        []any{hexToNumberPtr(`0x2`), hexToNumberPtr(`0x1`)},
 			minResponses: 2,
-			want:         newNumber(`0x1`),
+			want:         hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x1`), newNumber(`0x2`), newNumber(`0x3`)},
+			resps:        []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`), hexToNumberPtr(`0x3`)},
 			minResponses: 3,
-			want:         newNumber(`0x2`),
+			want:         hexToNumberPtr(`0x2`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x1`), newNumber(`0x2`), newNumber(`0x3`), newNumber(`0x4`)},
+			resps:        []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`), hexToNumberPtr(`0x3`), hexToNumberPtr(`0x4`)},
 			minResponses: 4,
-			want:         newNumber(`0x2`),
+			want:         hexToNumberPtr(`0x2`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x2`), newNumber(`0x2`), newNumber(`0x4`), newNumber(`0x4`)},
+			resps:        []any{hexToNumberPtr(`0x2`), hexToNumberPtr(`0x2`), hexToNumberPtr(`0x4`), hexToNumberPtr(`0x4`)},
 			minResponses: 4,
-			want:         newNumber(`0x3`),
+			want:         hexToNumberPtr(`0x3`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x1`), newNumber(`0x2`), errors.New("err")},
+			resps:        []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`), errors.New("err")},
 			minResponses: 2,
-			want:         newNumber(`0x1`),
+			want:         hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:        []interface{}{newNumber(`0x1`), errors.New("err"), errors.New("err")},
+			resps:        []any{hexToNumberPtr(`0x1`), errors.New("err"), errors.New("err")},
 			minResponses: 2,
 			wantErr:      true,
 		},
@@ -163,44 +165,44 @@ func Test_gasValueResolver_resolve(t *testing.T) {
 
 func Test_blockNumberResolver_resolve(t *testing.T) {
 	tests := []struct {
-		resps           []interface{}
+		resps           []any
 		minResponses    int
 		maxBlocksBehind int
-		want            interface{}
+		want            any
 		wantErr         bool
 	}{
 		{
-			resps:           []interface{}{newNumber(`0x1`)},
+			resps:           []any{hexToNumberPtr(`0x1`)},
 			minResponses:    1,
 			maxBlocksBehind: 1,
-			want:            newNumber(`0x1`),
+			want:            hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:           []interface{}{newNumber(`0x1`), newNumber(`0x2`)},
+			resps:           []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`)},
 			minResponses:    1,
 			maxBlocksBehind: 1,
-			want:            newNumber(`0x1`),
+			want:            hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:           []interface{}{newNumber(`0x1`), newNumber(`0x2`)},
+			resps:           []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`)},
 			minResponses:    1,
 			maxBlocksBehind: 0,
-			want:            newNumber(`0x2`),
+			want:            hexToNumberPtr(`0x2`),
 		},
 		{
-			resps:           []interface{}{newNumber(`0x1`), newNumber(`0x2`), newNumber(`0x3`)},
+			resps:           []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`), hexToNumberPtr(`0x3`)},
 			minResponses:    3,
 			maxBlocksBehind: 1,
-			want:            newNumber(`0x2`),
+			want:            hexToNumberPtr(`0x2`),
 		},
 		{
-			resps:           []interface{}{newNumber(`0x1`), newNumber(`0x2`), errors.New("err")},
+			resps:           []any{hexToNumberPtr(`0x1`), hexToNumberPtr(`0x2`), errors.New("err")},
 			minResponses:    2,
 			maxBlocksBehind: 1,
-			want:            newNumber(`0x1`),
+			want:            hexToNumberPtr(`0x1`),
 		},
 		{
-			resps:           []interface{}{newNumber(`0x1`), errors.New("err"), errors.New("err")},
+			resps:           []any{hexToNumberPtr(`0x1`), errors.New("err"), errors.New("err")},
 			minResponses:    2,
 			maxBlocksBehind: 1,
 			wantErr:         true,
@@ -217,4 +219,9 @@ func Test_blockNumberResolver_resolve(t *testing.T) {
 			assert.Equal(t, tt.want, v)
 		})
 	}
+}
+
+func hexToNumberPtr(hex string) *types.Number {
+	n := types.HexToNumber(hex)
+	return &n
 }

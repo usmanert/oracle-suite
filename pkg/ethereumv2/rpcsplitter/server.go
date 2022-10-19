@@ -17,6 +17,7 @@ package rpcsplitter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -24,6 +25,8 @@ import (
 	"time"
 
 	gethRPC "github.com/ethereum/go-ethereum/rpc"
+
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/types"
 
 	"github.com/chronicleprotocol/oracle-suite/pkg/log"
 	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
@@ -35,7 +38,7 @@ const defaultTotalTimeout = 10 * time.Second
 const defaultGracefulTimeout = 1 * time.Second
 
 type caller interface {
-	CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error
+	CallContext(ctx context.Context, result any, method string, args ...any) error
 }
 
 // server is an RPC proxy server. It merges multiple RPC endpoints into one.
@@ -115,11 +118,11 @@ func (s *server) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcETHAPI) BlockNumber() (interface{}, error) {
+func (r *rpcETHAPI) BlockNumber() (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &numberType{}
+	res := &types.Number{}
 	err := r.handler.call(ctx, r.handler.blockNumberResolver, res, "eth_blockNumber")
 
 	return res, err
@@ -129,16 +132,16 @@ func (r *rpcETHAPI) BlockNumber() (interface{}, error) {
 //
 // The number returned by this method is the median of all numbers returned
 // by the endpoints.
-func (r *rpcETHAPI) GetBlockByHash(blockHash hashType, obj bool) (interface{}, error) {
+func (r *rpcETHAPI) GetBlockByHash(blockHash types.Hash, obj bool) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	var res interface{}
+	var res any
 	switch obj {
 	case true:
-		res = &blockTxObjectsType{}
+		res = &types.BlockTxObjects{}
 	case false:
-		res = &blockTxHashesType{}
+		res = &types.BlockTxHashes{}
 	}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getBlockByHash", blockHash, obj)
 
@@ -149,16 +152,16 @@ func (r *rpcETHAPI) GetBlockByHash(blockHash hashType, obj bool) (interface{}, e
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcETHAPI) GetBlockByNumber(blockNumber numberType, obj bool) (interface{}, error) {
+func (r *rpcETHAPI) GetBlockByNumber(blockNumber types.Number, obj bool) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	var res interface{}
+	var res any
 	switch obj {
 	case true:
-		res = &blockTxObjectsType{}
+		res = &types.BlockTxObjects{}
 	case false:
-		res = &blockTxHashesType{}
+		res = &types.BlockTxHashes{}
 	}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getBlockByNumber", blockNumber, obj)
 
@@ -169,11 +172,11 @@ func (r *rpcETHAPI) GetBlockByNumber(blockNumber numberType, obj bool) (interfac
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcETHAPI) GetTransactionByHash(txHash hashType) (interface{}, error) {
+func (r *rpcETHAPI) GetTransactionByHash(txHash types.Hash) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &transactionType{}
+	res := &types.Transaction{}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getTransactionByHash", txHash)
 
 	return res, err
@@ -187,7 +190,7 @@ func (r *rpcETHAPI) GetTransactionByHash(txHash hashType) (interface{}, error) {
 // If the block number is set to "latest" or "pending", it will be replaced by
 // the block number returned by the BlockNumber method. The "earliest" tag is
 // not supported.
-func (r *rpcETHAPI) GetTransactionCount(addr addressType, blockID blockIDType) (interface{}, error) {
+func (r *rpcETHAPI) GetTransactionCount(addr types.Address, blockID types.BlockNumber) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -195,7 +198,7 @@ func (r *rpcETHAPI) GetTransactionCount(addr addressType, blockID blockIDType) (
 	if err != nil {
 		return nil, err
 	}
-	res := &numberType{}
+	res := &types.Number{}
 	err = r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getTransactionCount", addr, blockNumber)
 
 	return res, err
@@ -205,11 +208,11 @@ func (r *rpcETHAPI) GetTransactionCount(addr addressType, blockID blockIDType) (
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcETHAPI) GetTransactionReceipt(txHash hashType) (interface{}, error) {
+func (r *rpcETHAPI) GetTransactionReceipt(txHash types.Hash) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &transactionReceiptType{}
+	res := &types.TransactionReceiptType{}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getTransactionReceipt", txHash)
 
 	return res, err
@@ -223,11 +226,11 @@ func (r *rpcETHAPI) GetTransactionReceipt(txHash hashType) (interface{}, error) 
 // SendRawTransaction implements the "eth_sendRawTransaction" call.
 //
 // It returns the most common response.
-func (r *rpcETHAPI) SendRawTransaction(data bytesType) (interface{}, error) {
+func (r *rpcETHAPI) SendRawTransaction(data types.Bytes) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &hashType{}
+	res := &types.Hash{}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "eth_sendRawTransaction", data)
 
 	return res, err
@@ -241,7 +244,7 @@ func (r *rpcETHAPI) SendRawTransaction(data bytesType) (interface{}, error) {
 // If the block number is set to "latest" or "pending", it will be replaced by
 // the block number returned by the BlockNumber method. The "earliest" tag is
 // not supported.
-func (r *rpcETHAPI) GetBalance(addr addressType, blockID blockIDType) (interface{}, error) {
+func (r *rpcETHAPI) GetBalance(addr types.Address, blockID types.BlockNumber) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -249,7 +252,7 @@ func (r *rpcETHAPI) GetBalance(addr addressType, blockID blockIDType) (interface
 	if err != nil {
 		return nil, err
 	}
-	res := &numberType{}
+	res := &types.Number{}
 	err = r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getBalance", addr, blockNumber)
 
 	return res, err
@@ -263,7 +266,7 @@ func (r *rpcETHAPI) GetBalance(addr addressType, blockID blockIDType) (interface
 // If the block number is set to "latest" or "pending", it will be replaced by
 // the block number returned by the BlockNumber method. The "earliest" tag is
 // not supported.
-func (r *rpcETHAPI) GetCode(addr addressType, blockID blockIDType) (interface{}, error) {
+func (r *rpcETHAPI) GetCode(addr types.Address, blockID types.BlockNumber) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -271,7 +274,7 @@ func (r *rpcETHAPI) GetCode(addr addressType, blockID blockIDType) (interface{},
 	if err != nil {
 		return nil, err
 	}
-	res := &bytesType{}
+	res := &types.Bytes{}
 	err = r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getCode", addr, blockNumber)
 
 	return res, err
@@ -285,7 +288,7 @@ func (r *rpcETHAPI) GetCode(addr addressType, blockID blockIDType) (interface{},
 // If the block number is set to "latest" or "pending", it will be replaced by
 // the block number returned by the BlockNumber method. The "earliest" tag is
 // not supported.
-func (r *rpcETHAPI) GetStorageAt(data addressType, pos numberType, blockID blockIDType) (interface{}, error) {
+func (r *rpcETHAPI) GetStorageAt(data types.Address, pos types.Number, blockID types.BlockNumber) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -293,7 +296,7 @@ func (r *rpcETHAPI) GetStorageAt(data addressType, pos numberType, blockID block
 	if err != nil {
 		return nil, err
 	}
-	res := &hashType{}
+	res := &types.Hash{}
 	err = r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getStorageAt", data, pos, blockNumber)
 
 	return res, err
@@ -310,7 +313,7 @@ func (r *rpcETHAPI) GetStorageAt(data addressType, pos numberType, blockID block
 // If the block number is set to "latest" or "pending", it will be replaced by
 // the block number returned by the BlockNumber method. The "earliest" tag is
 // not supported.
-func (r *rpcETHAPI) Call(args jsonType, blockID blockIDType, overrides *jsonType) (interface{}, error) {
+func (r *rpcETHAPI) Call(args Any, blockID types.BlockNumber, overrides *Any) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -318,7 +321,7 @@ func (r *rpcETHAPI) Call(args jsonType, blockID blockIDType, overrides *jsonType
 	if err != nil {
 		return nil, err
 	}
-	res := &bytesType{}
+	res := &types.Bytes{}
 	err = r.handler.call(ctx, r.handler.defaultResolver, res, "eth_call", args, blockNumber, overrides)
 
 	return res, err
@@ -332,7 +335,7 @@ func (r *rpcETHAPI) Call(args jsonType, blockID blockIDType, overrides *jsonType
 // If the block number is set to "latest" or "pending", it will be replaced by
 // the block number returned by the BlockNumber method. The "earliest" tag is
 // not supported.
-func (r *rpcETHAPI) GetLogs(logFilter logFilterType) (interface{}, error) {
+func (r *rpcETHAPI) GetLogs(logFilter types.FilterLogsQuery) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -350,7 +353,7 @@ func (r *rpcETHAPI) GetLogs(logFilter logFilterType) (interface{}, error) {
 		}
 		*logFilter.ToBlock = blockNumber
 	}
-	res := &[]logType{}
+	res := &[]types.Log{}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "eth_getLogs", logFilter)
 
 	return res, err
@@ -362,11 +365,11 @@ func (r *rpcETHAPI) GetLogs(logFilter logFilterType) (interface{}, error) {
 //
 // The number returned by this method is the median of all numbers returned
 // by the endpoints.
-func (r *rpcETHAPI) GasPrice() (interface{}, error) {
+func (r *rpcETHAPI) GasPrice() (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &numberType{}
+	res := &types.Number{}
 	err := r.handler.call(ctx, r.handler.gasValueResolver, res, "eth_gasPrice")
 
 	return res, err
@@ -380,7 +383,7 @@ func (r *rpcETHAPI) GasPrice() (interface{}, error) {
 // If the block number is set to "latest" or "pending", it will be replaced by
 // the block number returned by the BlockNumber method. The "earliest" tag is
 // not supported.
-func (r *rpcETHAPI) EstimateGas(args jsonType, blockID blockIDType) (interface{}, error) {
+func (r *rpcETHAPI) EstimateGas(args Any, blockID types.BlockNumber) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -388,7 +391,7 @@ func (r *rpcETHAPI) EstimateGas(args jsonType, blockID blockIDType) (interface{}
 	if err != nil {
 		return nil, err
 	}
-	res := &numberType{}
+	res := &types.Number{}
 	err = r.handler.call(ctx, r.handler.gasValueResolver, res, "eth_estimateGas", args, blockNumber)
 
 	return res, err
@@ -398,7 +401,7 @@ func (r *rpcETHAPI) EstimateGas(args jsonType, blockID blockIDType) (interface{}
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcETHAPI) FeeHistory(count numberType, newestBlockID blockIDType, percentiles jsonType) (interface{}, error) {
+func (r *rpcETHAPI) FeeHistory(count types.Number, newestBlockID types.BlockNumber, percentiles Any) (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
@@ -406,7 +409,7 @@ func (r *rpcETHAPI) FeeHistory(count numberType, newestBlockID blockIDType, perc
 	if err != nil {
 		return nil, err
 	}
-	res := &feeHistoryType{}
+	res := &types.FeeHistory{}
 	err = r.handler.call(ctx, r.handler.defaultResolver, res, "eth_feeHistory", count, blockNumber, percentiles)
 
 	return res, err
@@ -416,11 +419,11 @@ func (r *rpcETHAPI) FeeHistory(count numberType, newestBlockID blockIDType, perc
 //
 // The number returned by this method is the median of all numbers returned
 // by the endpoints.
-func (r *rpcETHAPI) MaxPriorityFeePerGas() (interface{}, error) {
+func (r *rpcETHAPI) MaxPriorityFeePerGas() (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &numberType{}
+	res := &types.Number{}
 	err := r.handler.call(ctx, r.handler.gasValueResolver, res, "eth_maxPriorityFeePerGas")
 
 	return res, err
@@ -430,11 +433,11 @@ func (r *rpcETHAPI) MaxPriorityFeePerGas() (interface{}, error) {
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcETHAPI) ChainId() (interface{}, error) { //nolint:revive
+func (r *rpcETHAPI) ChainId() (any, error) { //nolint:revive,stylecheck
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &numberType{}
+	res := &types.Number{}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "eth_chainId")
 
 	return res, err
@@ -455,11 +458,11 @@ func (r *rpcETHAPI) ChainId() (interface{}, error) { //nolint:revive
 //
 // It returns the most common response that occurred at least as many times as
 // specified in the minRes method.
-func (r *rpcNETAPI) Version() (interface{}, error) {
+func (r *rpcNETAPI) Version() (any, error) {
 	ctx, ctxCancel := context.WithTimeout(context.Background(), r.handler.totalTimeout)
 	defer ctxCancel()
 
-	res := &jsonType{}
+	res := &Any{}
 	err := r.handler.call(ctx, r.handler.defaultResolver, res, "net_version")
 
 	return res, err
@@ -468,7 +471,7 @@ func (r *rpcNETAPI) Version() (interface{}, error) {
 // taggedBlockToNumber returns a block number for tagged blocks. This is
 // necessary because different RPC endpoints may convert tags to different
 // block numbers.
-func (s *server) taggedBlockToNumber(ctx context.Context, blockID blockIDType) (blockIDType, error) {
+func (s *server) taggedBlockToNumber(ctx context.Context, blockID types.BlockNumber) (types.BlockNumber, error) {
 	if len(s.callers) == 1 {
 		return blockID, nil
 	}
@@ -478,15 +481,15 @@ func (s *server) taggedBlockToNumber(ctx context.Context, blockID blockIDType) (
 	if blockID.IsEarliest() {
 		// The earliest block will be completely different on different
 		// endpoints. It is impossible to reliably support it.
-		return blockIDType{}, errors.New("earliest tag is not supported")
+		return types.BlockNumber{}, errors.New("earliest tag is not supported")
 	}
 	// The latest and pending blocks are handled in the same way.
-	res := &numberType{}
+	res := &types.Number{}
 	err := s.call(ctx, s.blockNumberResolver, res, "eth_blockNumber")
 	if err != nil {
-		return blockIDType{}, err
+		return types.BlockNumber{}, err
 	}
-	return blockIDType(*res), nil
+	return types.BlockNumber(*res), nil
 }
 
 // call executes RPC on all endpoints with the given arguments. If the context is
@@ -496,21 +499,21 @@ func (s *server) taggedBlockToNumber(ctx context.Context, blockID blockIDType) (
 func (s *server) call(
 	ctx context.Context,
 	resolver resolver,
-	result interface{},
+	result any,
 	method string,
-	args ...interface{},
+	args ...any,
 ) error {
 	if reflect.TypeOf(result).Kind() != reflect.Ptr {
 		return fmt.Errorf("call result parameter must be pointer")
 	}
 	// Send request to all endpoints.
-	ch := make(chan interface{}, len(s.callers))
+	ch := make(chan any, len(s.callers))
 	rt := reflect.TypeOf(result).Elem()
 	for n, c := range s.callers {
 		n, c := n, c
 		go func() {
 			t := time.Now()
-			var res interface{}
+			var res any
 			var err error
 			defer func() {
 				if r := recover(); r != nil {
@@ -546,7 +549,7 @@ func (s *server) call(
 	// and the response returned.
 	t := time.NewTimer(s.gracefulTimeout)
 	defer t.Stop()
-	var rs []interface{}
+	var rs []any
 	for {
 		wait := true
 		select {
@@ -574,7 +577,7 @@ func (s *server) call(
 // removeTrailingNilArgs removes trailing nil parameters from the params
 // slice. Some RPC servers do not like null parameters and will return a
 // "bad request" error if they occur.
-func removeTrailingNilArgs(params []interface{}) []interface{} {
+func removeTrailingNilArgs(params []any) []any {
 	for i := len(params) - 1; i >= 0; i-- {
 		if isNil(params[i]) {
 			continue
@@ -584,6 +587,20 @@ func removeTrailingNilArgs(params []interface{}) []interface{} {
 	return nil
 }
 
-func isNil(v interface{}) bool {
+func isNil(v any) bool {
 	return v == nil || (reflect.ValueOf(v).Kind() == reflect.Ptr && reflect.ValueOf(v).IsNil())
+}
+
+// Any stores an argument in its raw form, and it is passed to the RPC server
+// unmodified.
+type Any struct{ j any }
+
+// MarshalJSON implements the json.Marshaler interface.
+func (t Any) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.j)
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (t *Any) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &t.j)
 }

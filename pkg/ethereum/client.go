@@ -23,6 +23,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+// Transaction represents Ethereum transaction.
+//
+// Deprecated.
 type Transaction struct {
 	// Address is the contract's address.
 	Address Address
@@ -47,6 +50,9 @@ type Transaction struct {
 	SignedTx interface{}
 }
 
+// Call represents a call to a contract.
+//
+// Deprecated.
 type Call struct {
 	// Address is the contract's address.
 	Address Address
@@ -54,6 +60,9 @@ type Call struct {
 	Data []byte
 }
 
+// Client is an interface for Ethereum blockchain.
+//
+// Deprecated.
 type Client interface {
 	// BlockNumber returns the current block number.
 	BlockNumber(ctx context.Context) (*big.Int, error)
@@ -84,11 +93,15 @@ type contextKey string
 const contextBlockNumber contextKey = "ethereum_block_number"
 
 // WithBlockNumber sets the block number in the context.
+//
+// Deprecated.
 func WithBlockNumber(ctx context.Context, block *big.Int) context.Context {
 	return context.WithValue(ctx, contextBlockNumber, block)
 }
 
 // BlockNumberFromContext returns the block number from the context.
+//
+// Deprecated.
 func BlockNumberFromContext(ctx context.Context) *big.Int {
 	n, ok := ctx.Value(contextBlockNumber).(*big.Int)
 	if ok {

@@ -19,6 +19,8 @@ import (
 	"errors"
 	"math/big"
 	"sort"
+
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/types"
 )
 
 var errNotEnoughResponses = errors.New("not enough responses from RPC servers")
@@ -27,7 +29,7 @@ var errDifferentResponses = errors.New("RPC servers returned different responses
 // resolver takes responses from different endpoints and returns a single
 // response.
 type resolver interface {
-	resolve([]interface{}) (interface{}, error)
+	resolve([]any) (any, error)
 }
 
 // defaultResolver compares responses with each other and returns the most
@@ -38,7 +40,7 @@ type defaultResolver struct {
 }
 
 // resolve implements resolver interface.
-func (r *defaultResolver) resolve(resps []interface{}) (interface{}, error) {
+func (r *defaultResolver) resolve(resps []any) (any, error) {
 	if len(resps) < r.minResponses {
 		return nil, addError(errNotEnoughResponses, collectErrors(resps)...)
 	}
@@ -84,7 +86,7 @@ type gasValueResolver struct {
 }
 
 // resolve implements resolver interface.
-func (r *gasValueResolver) resolve(resps []interface{}) (interface{}, error) {
+func (r *gasValueResolver) resolve(resps []any) (any, error) {
 	ns := filterByNumberType(resps)
 	if len(ns) < r.minResponses {
 		return nil, addError(errNotEnoughResponses, collectErrors(resps)...)
@@ -100,9 +102,9 @@ func (r *gasValueResolver) resolve(resps []interface{}) (interface{}, error) {
 		a := ns[0].Big()
 		b := ns[1].Big()
 		if a.Cmp(b) > 0 {
-			return (*numberType)(b), nil
+			return bigToNumberPtr(b), nil
 		}
-		return (*numberType)(a), nil
+		return bigToNumberPtr(a), nil
 	}
 	// Calculate the median.
 	sort.Slice(ns, func(i, j int) bool {
@@ -112,7 +114,7 @@ func (r *gasValueResolver) resolve(resps []interface{}) (interface{}, error) {
 		m := len(ns) / 2
 		bx := ns[m-1].Big()
 		by := ns[m].Big()
-		return (*numberType)(new(big.Int).Div(new(big.Int).Add(bx, by), big.NewInt(2))), nil
+		return bigToNumberPtr(new(big.Int).Div(new(big.Int).Add(bx, by), big.NewInt(2))), nil
 	}
 	return ns[len(ns)/2], nil
 }
@@ -128,7 +130,7 @@ type blockNumberResolver struct {
 }
 
 // resolve implements resolver interface.
-func (r *blockNumberResolver) resolve(resps []interface{}) (interface{}, error) {
+func (r *blockNumberResolver) resolve(resps []any) (any, error) {
 	ns := filterByNumberType(resps)
 	if len(ns) < r.minResponses {
 		return nil, addError(errNotEnoughResponses, collectErrors(resps)...)
@@ -152,19 +154,24 @@ func (r *blockNumberResolver) resolve(resps []interface{}) (interface{}, error) 
 			block = nb
 		}
 	}
-	return (*numberType)(block), nil
+	return bigToNumberPtr(block), nil
 }
 
-func filterByNumberType(resps []interface{}) (s []*numberType) {
+func filterByNumberType(resps []any) (s []*types.Number) {
 	for _, r := range resps {
-		if t, ok := r.(*numberType); ok {
+		if t, ok := r.(*types.Number); ok {
 			s = append(s, t)
 		}
 	}
 	return
 }
 
-func collectErrors(resps []interface{}) (errs []error) {
+func bigToNumberPtr(x *big.Int) *types.Number {
+	n := types.BigToNumber(x)
+	return &n
+}
+
+func collectErrors(resps []any) (errs []error) {
 	for _, r := range resps {
 		if t, ok := r.(error); ok {
 			errs = append(errs, t)
