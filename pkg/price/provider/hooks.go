@@ -68,7 +68,9 @@ func findPrice(a []*Price, selector func(*Price) bool) *Price {
 				return price
 			}
 			//nolint
-			return findPrice(price.Prices, selector)
+			if len(price.Prices) > 0 {
+				return findPrice(price.Prices, selector)
+			}
 		}
 	}
 	return nil
