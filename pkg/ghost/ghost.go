@@ -18,50 +18,44 @@ package ghost
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
-	"github.com/makerdao/oracle-suite/internal/gofer/marshal"
-	"github.com/makerdao/oracle-suite/pkg/ethereum"
-	"github.com/makerdao/oracle-suite/pkg/gofer"
-	"github.com/makerdao/oracle-suite/pkg/log"
-	"github.com/makerdao/oracle-suite/pkg/oracle"
-	"github.com/makerdao/oracle-suite/pkg/transport"
-	"github.com/makerdao/oracle-suite/pkg/transport/messages"
+	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
+	"github.com/chronicleprotocol/oracle-suite/pkg/price/provider"
+	"github.com/chronicleprotocol/oracle-suite/pkg/price/provider/marshal"
+
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
+	"github.com/chronicleprotocol/oracle-suite/pkg/log"
+	"github.com/chronicleprotocol/oracle-suite/pkg/price/oracle"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
 
 const LoggerTag = "GHOST"
 
-type ErrUnableToFindAsset struct {
-	AssetName string
-}
-
-func (e ErrUnableToFindAsset) Error() string {
-	return fmt.Sprintf("unable to find the %s in Gofer price models", e.AssetName)
-}
-
 type Ghost struct {
 	ctx    context.Context
-	doneCh chan struct{}
+	waitCh chan error
 
-	gofer      gofer.Gofer
-	signer     ethereum.Signer
-	transport  transport.Transport
-	interval   time.Duration
-	pairs      []string
-	goferPairs map[gofer.Pair]string
-	log        log.Logger
+	priceProvider provider.Provider
+	signer        ethereum.Signer
+	transport     transport.Transport
+	interval      time.Duration
+	pairs         []provider.Pair
+	log           log.Logger
 }
 
+// Config is the configuration for the Ghost.
 type Config struct {
-	// Gofer is an instance of the gofer.Gofer which will be used to fetch
-	// prices.
-	Gofer gofer.Gofer
+	// Pairs is a list supported pairs.
+	Pairs []string
+	// PriceProvider is an instance of the provider.Provider.
+	PriceProvider provider.Provider
 	// Signer is an instance of the ethereum.Signer which will be used to
 	// sign prices.
 	Signer ethereum.Signer
-	// Transport is a implementation of transport used to send prices to
+	// Transport is an implementation of transport used to send prices to
 	// relayers.
 	Transport transport.Transport
 	// Interval describes how often we should send prices to the network.
@@ -69,72 +63,62 @@ type Config struct {
 	// Logger is a current logger interface used by the Ghost. The Logger
 	// helps to monitor asynchronous processes.
 	Logger log.Logger
-	// Pairs is a list supported pairs.
-	Pairs []string
 }
 
-func NewGhost(ctx context.Context, cfg Config) (*Ghost, error) {
-	if ctx == nil {
-		return nil, errors.New("context must not be nil")
+func New(cfg Config) (*Ghost, error) {
+	if cfg.PriceProvider == nil {
+		return nil, errors.New("price provider must not be nil")
+	}
+	if cfg.Signer == nil {
+		return nil, errors.New("signer must not be nil")
+	}
+	if cfg.Transport == nil {
+		return nil, errors.New("transport must not be nil")
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = null.New()
+	}
+	pairs, err := provider.NewPairs(cfg.Pairs...)
+	if err != nil {
+		return nil, err
 	}
 	g := &Ghost{
-		ctx:        ctx,
-		doneCh:     make(chan struct{}),
-		gofer:      cfg.Gofer,
-		signer:     cfg.Signer,
-		transport:  cfg.Transport,
-		interval:   cfg.Interval,
-		pairs:      cfg.Pairs,
-		goferPairs: make(map[gofer.Pair]string),
-		log:        cfg.Logger.WithField("tag", LoggerTag),
+		waitCh:        make(chan error),
+		priceProvider: cfg.PriceProvider,
+		signer:        cfg.Signer,
+		transport:     cfg.Transport,
+		interval:      cfg.Interval,
+		pairs:         pairs,
+		log:           cfg.Logger.WithField("tag", LoggerTag),
 	}
 	return g, nil
 }
 
-func (g *Ghost) Start() error {
+func (g *Ghost) Start(ctx context.Context) error {
+	if g.ctx != nil {
+		return errors.New("service can be started only once")
+	}
+	if ctx == nil {
+		return errors.New("context must not be nil")
+	}
 	g.log.Infof("Starting")
-
-	// Unfortunately, the Gofer stores pairs in the AAA/BBB format but Ghost
-	// (and oracle contract) stores them in AAABBB format. Because of this we
-	// need to make this wired mapping:
-	for _, pair := range g.pairs {
-		goferPairs, err := g.gofer.Pairs()
-		if err != nil {
-			return err
-		}
-		found := false
-		for _, goferPair := range goferPairs {
-			if goferPair.Base+goferPair.Quote == pair {
-				g.goferPairs[goferPair] = pair
-				found = true
-				break
-			}
-		}
-		if !found {
-			return ErrUnableToFindAsset{AssetName: pair}
-		}
-	}
-
-	err := g.broadcasterLoop()
-	if err != nil {
-		return err
-	}
-
+	g.ctx = ctx
+	go g.broadcasterRoutine()
 	go g.contextCancelHandler()
 	return nil
 }
 
-func (g *Ghost) Wait() {
-	<-g.doneCh
+// Wait waits until the context is canceled or until an error occurs.
+func (g *Ghost) Wait() chan error {
+	return g.waitCh
 }
 
 // broadcast sends price for single pair to the network. This method uses
-// current price from the Gofer so it must be updated beforehand.
-func (g *Ghost) broadcast(goferPair gofer.Pair) error {
+// current price from the Provider, so it must be updated beforehand.
+func (g *Ghost) broadcast(pair provider.Pair) error {
 	var err error
 
-	pair := g.goferPairs[goferPair]
-	tick, err := g.gofer.Price(goferPair)
+	tick, err := g.priceProvider.Price(pair)
 	if err != nil {
 		return err
 	}
@@ -143,7 +127,7 @@ func (g *Ghost) broadcast(goferPair gofer.Pair) error {
 	}
 
 	// Create price:
-	price := &oracle.Price{Wat: pair, Age: tick.Time}
+	price := &oracle.Price{Wat: pair.Base + pair.Quote, Age: tick.Time}
 	price.SetFloat64Price(tick.Price)
 
 	// Sign price:
@@ -153,77 +137,69 @@ func (g *Ghost) broadcast(goferPair gofer.Pair) error {
 	}
 
 	// Broadcast price to P2P network:
-	message, err := createPriceMessage(price, tick)
+	msg, err := createPriceMessage(price, tick)
 	if err != nil {
 		return err
 	}
-	err = g.transport.Broadcast(messages.PriceMessageName, message)
-	if err != nil {
+	if err := g.transport.Broadcast(messages.PriceV0MessageName, msg.AsV0()); err != nil {
 		return err
 	}
-
+	if err := g.transport.Broadcast(messages.PriceV1MessageName, msg.AsV1()); err != nil {
+		return err
+	}
 	return err
 }
 
-// broadcasterLoop creates a asynchronous loop which fetches prices from exchanges and then
+// broadcasterRoutine creates an asynchronous loop which fetches prices from exchanges and then
 // sends them to the network at a specified interval.
-func (g *Ghost) broadcasterLoop() error {
+func (g *Ghost) broadcasterRoutine() {
 	if g.interval == 0 {
-		return nil
+		return
 	}
-
+	var wg sync.WaitGroup
 	ticker := time.NewTicker(g.interval)
-	wg := sync.WaitGroup{}
-	go func() {
-		for {
-			select {
-			case <-g.doneCh:
-				ticker.Stop()
-				return
-			case <-ticker.C:
-				// TODO: fetch all prices before broadcast is called
-
-				// Send prices to the network:
-				//
-				// Signing may be slow, especially with high KDF so this is why
-				// we're using goroutines here.
-				wg.Add(1)
-				go func() {
-					for assetPair := range g.goferPairs {
-						err := g.broadcast(assetPair)
-						if err != nil {
-							g.log.
-								WithFields(log.Fields{"assetPair": assetPair}).
-								WithError(err).
-								Warn("Unable to broadcast price")
-						} else {
-							g.log.
-								WithFields(log.Fields{"assetPair": assetPair}).
-								Info("Price broadcast")
-						}
+	for {
+		select {
+		case <-g.ctx.Done():
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			// Send prices to the network:
+			// Signing may be slow, especially with high KDF so this is why
+			// we are using goroutines here.
+			wg.Add(1)
+			go func() {
+				for _, pair := range g.pairs {
+					err := g.broadcast(pair)
+					if err != nil {
+						g.log.
+							WithFields(log.Fields{"assetPair": pair}).
+							WithError(err).
+							Warn("Unable to broadcast price")
+					} else {
+						g.log.
+							WithFields(log.Fields{"assetPair": pair}).
+							Info("Price broadcast")
 					}
-					wg.Done()
-				}()
-			}
-			wg.Wait()
+				}
+				wg.Done()
+			}()
 		}
-	}()
-
-	return nil
+		wg.Wait()
+	}
 }
 
 func (g *Ghost) contextCancelHandler() {
-	defer func() { close(g.doneCh) }()
+	defer func() { close(g.waitCh) }()
 	defer g.log.Info("Stopped")
 	<-g.ctx.Done()
 }
 
-func createPriceMessage(op *oracle.Price, gp *gofer.Price) (*messages.Price, error) {
+func createPriceMessage(op *oracle.Price, gp *provider.Price) (*messages.Price, error) {
 	trace, err := marshal.Marshall(marshal.JSON, gp)
 	if err != nil {
 		return nil, err
 	}
-
 	return &messages.Price{
 		Price: op,
 		Trace: trace,

@@ -21,13 +21,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/makerdao/oracle-suite/internal/httpserver"
-	"github.com/makerdao/oracle-suite/internal/httpserver/middleware"
-	"github.com/makerdao/oracle-suite/internal/rpcsplitter"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereumv2/rpcsplitter"
+	"github.com/chronicleprotocol/oracle-suite/pkg/httpserver"
+	"github.com/chronicleprotocol/oracle-suite/pkg/httpserver/middleware"
 )
 
 func NewRunCmd(opts *options) *cobra.Command {
@@ -35,25 +35,25 @@ func NewRunCmd(opts *options) *cobra.Command {
 		Use:     "run",
 		Args:    cobra.ExactArgs(0),
 		Aliases: []string{"agent"},
-		Short:   "",
-		Long:    ``,
+		Short:   "Start server",
+		Long:    `Start server`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			ctx, ctxCancel := context.WithCancel(context.Background())
-			defer ctxCancel()
-
-			log, err := logger(opts)
+			ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt)
+			log := opts.Logger()
+			var server, err = rpcsplitter.NewServer(
+				rpcsplitter.WithEndpoints(opts.EthRPCURLs),
+				rpcsplitter.WithTotalTimeout(time.Duration(opts.TotalTimeoutSec)*time.Second),
+				rpcsplitter.WithGracefulTimeout(time.Duration(opts.GracefulTimeoutSec)*time.Second),
+				rpcsplitter.WithRequirements(minimumRequiredResponses(len(opts.EthRPCURLs)), opts.MaxBlocksBehind),
+				rpcsplitter.WithLogger(opts.Logger()),
+			)
 			if err != nil {
 				return err
 			}
 
-			handler, err := rpcsplitter.NewHandler(opts.EthRPCURLs, log)
-			if err != nil {
-				return err
-			}
-
-			srv := httpserver.New(ctx, &http.Server{
+			srv := httpserver.New(&http.Server{
 				Addr:    opts.Listen,
-				Handler: handler,
+				Handler: server,
 			})
 
 			srv.Use(&middleware.Recover{
@@ -72,22 +72,26 @@ func NewRunCmd(opts *options) *cobra.Command {
 				})
 			}
 
-			err = srv.ListenAndServe()
+			err = srv.Start(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("unable to start the HTTP server: %w", err)
 			}
+
 			defer func() {
-				err := srv.Wait()
+				err := <-srv.Wait()
 				if err != nil {
 					log.WithError(err).Error("Error while closing HTTP server")
 				}
 			}()
 
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-			<-c
-
-			return nil
+			return <-srv.Wait()
 		},
 	}
+}
+
+func minimumRequiredResponses(endpoints int) int {
+	if endpoints < 2 {
+		return endpoints
+	}
+	return endpoints - 1
 }

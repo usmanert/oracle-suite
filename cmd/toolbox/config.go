@@ -18,10 +18,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/makerdao/oracle-suite/internal/config"
-	ethereumConfig "github.com/makerdao/oracle-suite/internal/config/ethereum"
-	spectreConfig "github.com/makerdao/oracle-suite/internal/config/spectre"
-	"github.com/makerdao/oracle-suite/pkg/ethereum"
+	"github.com/chronicleprotocol/oracle-suite/pkg/config"
+	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
+	spectreConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/spectre"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
+	"github.com/chronicleprotocol/oracle-suite/pkg/log/null"
 )
 
 type Config struct {
@@ -34,7 +35,7 @@ func (c *Config) Configure() (ethereum.Client, ethereum.Signer, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	cli, err := c.Ethereum.ConfigureEthereumClient(sig)
+	cli, err := c.Ethereum.ConfigureEthereumClient(sig, null.New())
 	if err != nil {
 		return nil, nil, err
 	}

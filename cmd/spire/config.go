@@ -18,19 +18,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/sirupsen/logrus"
-
-	"github.com/makerdao/oracle-suite/internal/config"
-	ethereumConfig "github.com/makerdao/oracle-suite/internal/config/ethereum"
-	feedsConfig "github.com/makerdao/oracle-suite/internal/config/feeds"
-	spireConfig "github.com/makerdao/oracle-suite/internal/config/spire"
-	transportConfig "github.com/makerdao/oracle-suite/internal/config/transport"
-	"github.com/makerdao/oracle-suite/pkg/datastore"
-	"github.com/makerdao/oracle-suite/pkg/log"
-	logLogrus "github.com/makerdao/oracle-suite/pkg/log/logrus"
-	"github.com/makerdao/oracle-suite/pkg/spire"
-	"github.com/makerdao/oracle-suite/pkg/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/config"
+	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
+	feedsConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/feeds"
+	loggerConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/logger"
+	spireConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/spire"
+	transportConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/spire"
+	"github.com/chronicleprotocol/oracle-suite/pkg/supervisor"
+	"github.com/chronicleprotocol/oracle-suite/pkg/sysmon"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
 
 type Config struct {
@@ -38,187 +38,95 @@ type Config struct {
 	Ethereum  ethereumConfig.Ethereum   `json:"ethereum"`
 	Spire     spireConfig.Spire         `json:"spire"`
 	Feeds     feedsConfig.Feeds         `json:"feeds"`
+	Logger    loggerConfig.Logger       `json:"logger"`
 }
 
-type ClientDependencies struct {
-	Context context.Context
-}
-
-type AgentDependencies struct {
-	Context context.Context
-	Logger  log.Logger
-}
-
-func (c *Config) ConfigureClient(d ClientDependencies) (*spire.Client, error) {
-	sig, err := c.Ethereum.ConfigureSigner()
+func PrepareAgentServices(ctx context.Context, opts *options) (*supervisor.Supervisor, error) {
+	err := config.ParseFile(&opts.Config, opts.ConfigFilePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(`config error: %w`, err)
 	}
-	cli, err := c.Spire.ConfigureClient(spireConfig.ClientDependencies{
-		Context: d.Context,
-		Signer:  sig,
+	log, err := opts.Config.Logger.Configure(loggerConfig.Dependencies{
+		AppName:    "spire",
+		BaseLogger: opts.Logger(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(`logger config error: %w`, err)
 	}
-	return cli, nil
-}
-
-func (c *Config) ConfigureAgent(d AgentDependencies) (transport.Transport, datastore.Datastore, *spire.Agent, error) {
-	sig, err := c.Ethereum.ConfigureSigner()
+	sig, err := opts.Config.Ethereum.ConfigureSigner()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-	fed, err := c.Feeds.Addresses()
+	fed, err := opts.Config.Feeds.Addresses()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`feeds config error: %w`, err)
 	}
-	tra, err := c.Transport.Configure(transportConfig.Dependencies{
-		Context: d.Context,
-		Signer:  sig,
-		Feeds:   fed,
-		Logger:  d.Logger,
-	})
+	tra, err := opts.Config.Transport.Configure(transportConfig.Dependencies{
+		Signer: sig,
+		Feeds:  fed,
+		Logger: log,
+	},
+		map[string]transport.Message{
+			messages.PriceV0MessageName: (*messages.Price)(nil),
+			messages.PriceV1MessageName: (*messages.Price)(nil),
+		},
+	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`transport config error: %w`, err)
 	}
-	dat, err := c.Spire.ConfigureDatastore(spireConfig.DatastoreDependencies{
-		Context:   d.Context,
+	dat, err := opts.Config.Spire.ConfigurePriceStore(spireConfig.PriceStoreDependencies{
 		Signer:    sig,
 		Transport: tra,
 		Feeds:     fed,
-		Logger:    d.Logger,
+		Logger:    log,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`spire config error: %w`, err)
 	}
-	age, err := c.Spire.ConfigureAgent(spireConfig.AgentDependencies{
-		Context:   d.Context,
-		Signer:    sig,
-		Transport: tra,
-		Datastore: dat,
-		Feeds:     fed,
-		Logger:    d.Logger,
+	age, err := opts.Config.Spire.ConfigureAgent(spireConfig.AgentDependencies{
+		Signer:     sig,
+		Transport:  tra,
+		PriceStore: dat,
+		Feeds:      fed,
+		Logger:     log,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`spire config error: %w`, err)
 	}
-	return tra, dat, age, nil
+	sup := supervisor.New(log)
+	sup.Watch(tra, dat, age, sysmon.New(time.Minute, log))
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
+	}
+	return sup, nil
 }
 
-type ClientServices struct {
-	ctxCancel context.CancelFunc
-	Client    *spire.Client
-}
-
-func PrepareClientServices(ctx context.Context, opts *options) (*ClientServices, error) {
-	var err error
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			ctxCancel()
-		}
-	}()
-
-	// Load config file:
-	err = config.ParseFile(&opts.Config, opts.ConfigFilePath)
+func PrepareClientServices(ctx context.Context, opts *options) (*supervisor.Supervisor, *spire.Client, error) {
+	err := config.ParseFile(&opts.Config, opts.ConfigFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse configuration file: %w", err)
+		return nil, nil, fmt.Errorf(`config error: %w`, err)
 	}
-
-	// Services:
-	cli, err := opts.Config.ConfigureClient(ClientDependencies{
-		Context: ctx,
+	log, err := opts.Config.Logger.Configure(loggerConfig.Dependencies{
+		AppName:    "spire",
+		BaseLogger: opts.Logger(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to load Spire configuration: %w", err)
+		return nil, nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-
-	return &ClientServices{
-		ctxCancel: ctxCancel,
-		Client:    cli,
-	}, nil
-}
-
-func (s *ClientServices) Start() error {
-	var err error
-	if err = s.Client.Start(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *ClientServices) CancelAndWait() {
-	s.ctxCancel()
-	s.Client.Wait()
-}
-
-type AgentServices struct {
-	ctxCancel context.CancelFunc
-	Transport transport.Transport
-	Datastore datastore.Datastore
-	Agent     *spire.Agent
-}
-
-func PrepareAgentServices(ctx context.Context, opts *options) (*AgentServices, error) {
-	var err error
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			ctxCancel()
-		}
-	}()
-
-	// Load config file:
-	err = config.ParseFile(&opts.Config, opts.ConfigFilePath)
+	sig, err := opts.Config.Ethereum.ConfigureSigner()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse configuration file: %w", err)
+		return nil, nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-
-	// Logger:
-	ll, err := logrus.ParseLevel(opts.LogVerbosity)
-	if err != nil {
-		return nil, err
-	}
-	lr := logrus.New()
-	lr.SetLevel(ll)
-	lr.SetFormatter(opts.LogFormat.Formatter())
-	logger := logLogrus.New(lr)
-
-	// Services:
-	tra, dat, age, err := opts.Config.ConfigureAgent(AgentDependencies{
-		Context: ctx,
-		Logger:  logger,
+	cli, err := opts.Config.Spire.ConfigureClient(spireConfig.ClientDependencies{
+		Signer: sig,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to load Spire configuration: %w", err)
+		return nil, nil, fmt.Errorf(`spire config error: %w`, err)
 	}
-
-	return &AgentServices{
-		ctxCancel: ctxCancel,
-		Transport: tra,
-		Datastore: dat,
-		Agent:     age,
-	}, nil
-}
-
-func (s *AgentServices) Start() error {
-	var err error
-	if err = s.Transport.Start(); err != nil {
-		return err
+	sup := supervisor.New(log)
+	sup.Watch(cli)
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
 	}
-	if err = s.Datastore.Start(); err != nil {
-		return err
-	}
-	if err = s.Agent.Start(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *AgentServices) CancelAndWait() {
-	s.ctxCancel()
-	s.Transport.Wait()
-	s.Datastore.Wait()
-	s.Agent.Wait()
+	return sup, cli, nil
 }

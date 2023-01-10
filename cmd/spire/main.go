@@ -16,10 +16,9 @@
 package main
 
 import (
-	_ "embed"
 	"os"
 
-	suite "github.com/makerdao/oracle-suite"
+	suite "github.com/chronicleprotocol/oracle-suite"
 )
 
 func main() {

@@ -12,33 +12,34 @@ exactly, from how many sources you want to pull prices and what conditions they 
 
 * [Installation](#installation)
 * [Price models](#price-models)
-* [Origins configuration](#origins-configuration)
+* [Configuration](#configuration)
 * [Commands](#commands)
     * [gofer price](#gofer-price)
     * [gofer pairs](#gofer-pairs)
     * [gofer agent](#gofer-agent)
-* [Gofer library](#gofer-library)
 * [License](#license)
 
 ## Installation
 
 To install it, you'll first need Go installed on your machine. Then you can use standard Go
-command: `go get -u github.com/makerdao/oracle-suite/cmd/gofer`.
+command: `go install github.com/chronicleprotocol/oracle-suite/cmd/gofer@latest`
 
 Alternatively, you can build Gofer using `Makefile` directly from the repository. This approach is recommended if you
 wish to work on Gofer source.
 
 ```bash
-git clone https://github.com/makerdao/oracle-suite.git
+git clone https://github.com/ma/oracle-suite.git
 cd oracle-suite
 make
 ```
 
-## Price models
+## Configuration
 
-To start working with Gofer, you have to define price models first. Price models are defined in a JSON file. By default,
-the default config file location is `gofer.json` in the current directory. You can change the config file location using
-the `--config` flag.
+### Price models configuration
+
+To start working with Gofer, you have to define price models first. Price models are defined in a JSON or YAML file. By
+default, the default config file location is `gofer.json` in the current directory. You can change the config file
+location using the `--config` flag.
 
 Simple price model for the `BTC/USD` asset pair may look like this:
 
@@ -87,7 +88,6 @@ Price model for each asset pair consists of three keys: `method`, `sources` and 
         - `coinmarketcap` - [CoinMarketCap](https://coinmarketcap.com/)
         - `ddex` - [DDEX](https://ddex.net/)
         - `folgory` - [Folgory](https://folgory.com/)
-        - `ftx` - [FTX](https://ftx.com/)
         - `fx` - [exchangeratesapi.io](https://exchangeratesapi.io/) (fiat currencies)
         - `gateio` - [Gateio](https://gate.io/)
         - `gemini` - [Gemini](https://gemini.com/)
@@ -95,7 +95,6 @@ Price model for each asset pair consists of three keys: `method`, `sources` and 
         - `huobi` - [Huobi](https://huobi.com/)
         - `kraken` - [Kraken](https://kraken.com/)
         - `kucoin` - [KuCoin](https://kucoin.com/)
-        - `kyber` - [Kyber](https://blog.kyber.network/)
         - `loopring` - [Loopring](https://loopring.org/)
         - `okex` - [OKEx](https://okex.com/)
         - `openexchangerates` - [OpenExchangeRates](https://openexchangerates.org)
@@ -129,8 +128,11 @@ Price model for each asset pair consists of three keys: `method`, `sources` and 
       the `params` field:
         - `minimumSuccessfulSources` - minimum number of successfully retrieved sources to consider calculated median
           price as reliable.
+        - `postPriceHook` - In some cases a check should be done after the median price has been obtained. E.g. in the
+          case of `rETH`, a circuit breaker value is checked against the obtained median, and if the deviation is high
+          enough, a price error will be set.
 
-## Origins configuration
+### Origins configuration
 
 Some origins might require additional configuration parameters like an `API Key`. In the current implementation, we
 have `openexchangerates` and `coinmarketcap`. Both of these origins require an `API Key`. To configure these origins we
@@ -155,6 +157,57 @@ Example:
 
 - `type` - this key corresponds to the built-in origin set
 - `params` - this object will map the params to the specific origin configuration (apiKey is one example)
+
+### Configuration reference
+
+- `ethereum` - Ethereum client configuration. It is used by Origins, which pulls prices directly from the blockchain.
+    - `rpc` (`string|[]string`) - List of RPC server addresses. It is recommended to use at least three addresses from
+      different providers.
+    - `timeout` (`int`) - total timeout in seconds (default: 10).
+    - `gracefulTimeout` (`int`) - timeout to graceful finish requests to slower RPC nodes, it is used only
+      when it is possible to return a correct response using responses from the remaining RPC nodes (
+      default: 1).
+    - `gracefulTimeout` (`int`) - if multiple RPC nodes are used, determines how far one node can be behind
+      the last known block (default: 0).
+- `logger` - Optional logger configuration.
+    - `grafana` - Configuration of Grafana logger. Grafana logger can extract values from log messages and send them to
+      Grafana Cloud.
+        - `enable` (`string`) - Enable Grafana metrics.
+        - `interval` (`int`) - Specifies how often, in seconds, logs should be sent to the Grafana Cloud server. Logs
+          with the same name in that interval will be replaced with never ones.
+        - `endpoint` (`string`) - Graphite server endpoint.
+        - `apiKey` (`string`) - Graphite API key.
+        - `[]metrics` - List of metric definitions
+            - `matchMessage` (`string`) - Regular expression that must match a log message.
+            - `matchFields` (`[string]string`) - Map of fields whose values must match a regular expression.
+            - `name` (`string`) - Name of metric. It can contain references to log fields in the format `%{path}`,
+              where path is the dot-separated path to the field.
+            - `tags` (`[string][]string`) - List of metric tags. They can contain references to log fields in the
+              format `%{path}`, where path is the dot-separated path to the field.
+            - `value` (`string`) - Dot-separated path of the field with the metric value. If empty, the value 1 will be
+              used as the metric value.
+            - `scaleFactor` (`float`) - Scales the value by the specified number. If it is zero, scaling is not
+              applied (default: 0).
+            - `onDuplicate` (`string`) - Specifies how duplicated values in the same interval should be handled. Allowed
+              options are:
+                - `sum` - Add values.
+                - `sub` - Subtract values.
+                - `max` - Use higher one.
+                - `min` - Use lower one.
+                - `replace` (default) - Replace the value with a newer one.
+- `gofer` - Gofer configuration.
+    - `rpcListenAddr` (`string`) - Listen address for the RPC endpoint provided as the combination of IP address and
+      port number. This parameter is optional. If specified, Gofer will attempt to retrieve prices from the specified
+      RPC endpoint.
+    - `origins` - [Origins configuration](#origins-configuration)
+    - `priceModels` - [Price models configuration](#price-models-configuration)
+
+### Environment variables
+
+It is possible to use environment variables anywhere in the configuration file. The syntax is similar as in the
+shell: `${ENV_VAR}`. If the environment variable is not set, the error will be returned during the application
+startup. To escape the dollar sign, use `\$` It is possible to define default values for environment variables.
+To do so, use the following syntax: `${ENV_VAR-default}`.
 
 ## Commands
 
@@ -347,56 +400,6 @@ you have to launch the agent using the `gofer agent` command.
 
 From now, the `gofer price` command will retrieve asset prices from the agent instead of retrieving them directly from
 the origins. If you want to temporarily disable this behavior you have to use the `--norpc` flag.
-
-## Gofer library
-
-Gofer can also be used as a library. Below you can find a simple example:
-
-```go
-package main
-
-import (
-	"fmt"
-	"time"
-
-	"github.com/makerdao/oracle-suite/internal/query"
-
-	"github.com/makerdao/oracle-suite/pkg/gofer"
-	"github.com/makerdao/oracle-suite/pkg/gofer/graph"
-	"github.com/makerdao/oracle-suite/pkg/gofer/graph/feeder"
-	"github.com/makerdao/oracle-suite/pkg/gofer/graph/nodes"
-	"github.com/makerdao/oracle-suite/pkg/gofer/origins"
-	"github.com/makerdao/oracle-suite/pkg/log/null"
-)
-
-func main() {
-	// Price model model for the BTC/USD pair:
-	btcusd := gofer.Pair{Base: "BTC", Quote: "USD"}
-	bitfinexBTCUSD := nodes.OriginPair{Origin: "bitfinex", Pair: btcusd}
-	binanceBTCUSD := nodes.OriginPair{Origin: "binance", Pair: btcusd}
-	medianNode := nodes.NewMedianAggregatorNode(btcusd, 2)
-	medianNode.AddChild(nodes.NewOriginNode(bitfinexBTCUSD, time.Minute, 2*time.Minute))
-	medianNode.AddChild(nodes.NewOriginNode(binanceBTCUSD, time.Minute, 2*time.Minute))
-	m := map[gofer.Pair]nodes.Aggregator{btcusd: medianNode}
-
-	const defaultWorkerCount = 5
-	httpWorkerPool := query.NewHTTPWorkerPool(defaultWorkerCount)
-
-	// Feeder is used to fetch prices:
-	f := feeder.NewFeeder(origins.DefaultOriginSet(httpWorkerPool), null.New())
-
-	// Initialize gofer and ask for BTC/USD price:
-	g := graph.NewGofer(m, f)
-	p, err := g.Price(btcusd)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("%s: %f", btcusd, p.Price)
-}
-```
-
-The full documentation for Gofer library can be found
-here: https://pkg.go.dev/github.com/makerdao/oracle-suite/pkg/gofer
 
 ## License
 

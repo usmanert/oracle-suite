@@ -17,91 +17,47 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
-	"github.com/sirupsen/logrus"
-
-	"github.com/makerdao/oracle-suite/internal/config"
-	transportConfig "github.com/makerdao/oracle-suite/internal/config/transport"
-	logLogrus "github.com/makerdao/oracle-suite/pkg/log/logrus"
-	"github.com/makerdao/oracle-suite/pkg/transport"
-
-	"github.com/makerdao/oracle-suite/pkg/log"
+	"github.com/chronicleprotocol/oracle-suite/pkg/config"
+	loggerConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/logger"
+	transportConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/supervisor"
+	"github.com/chronicleprotocol/oracle-suite/pkg/sysmon"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport/libp2p"
 )
 
 type Config struct {
 	Transport transportConfig.Transport `json:"transport"`
+	Logger    loggerConfig.Logger       `json:"logger"`
 }
 
-type Dependencies struct {
-	Context context.Context
-	Logger  log.Logger
-}
-
-func (c *Config) Configure(d Dependencies) (transport.Transport, error) {
-	tra, err := c.Transport.ConfigureP2PBoostrap(transportConfig.BootstrapDependencies{
-		Context: d.Context,
-		Logger:  d.Logger,
+func PrepareSupervisor(ctx context.Context, opts *options) (*supervisor.Supervisor, error) {
+	err := config.ParseFile(&opts.Config, opts.ConfigFilePath)
+	if err != nil {
+		return nil, fmt.Errorf(`config error: %w`, err)
+	}
+	log, err := opts.Config.Logger.Configure(loggerConfig.Dependencies{
+		BaseLogger: opts.Logger(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-	return tra, nil
-}
-
-type Service struct {
-	ctxCancel context.CancelFunc
-	Transport transport.Transport
-}
-
-func PrepareService(ctx context.Context, opts *options) (*Service, error) {
-	var err error
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			ctxCancel()
-		}
-	}()
-
-	// Load config file:
-	err = config.ParseFile(&opts.Config, opts.ConfigFilePath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Logger:
-	ll, err := logrus.ParseLevel(opts.LogVerbosity)
-	if err != nil {
-		return nil, err
-	}
-	lr := logrus.New()
-	lr.SetLevel(ll)
-	lr.SetFormatter(opts.LogFormat.Formatter())
-	logger := logLogrus.New(lr)
-
-	// Services:
-	tra, err := opts.Config.Configure(Dependencies{
-		Context: ctx,
-		Logger:  logger,
+	tra, err := opts.Config.Transport.ConfigureP2PBoostrap(transportConfig.BootstrapDependencies{
+		Logger: log,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(`transport config error: %w`, err)
 	}
-
-	return &Service{
-		ctxCancel: ctxCancel,
-		Transport: tra,
-	}, nil
-}
-
-func (s *Service) Start() error {
-	var err error
-	if err = s.Transport.Start(); err != nil {
-		return err
+	if _, ok := tra.(*libp2p.P2P); !ok {
+		return nil, errors.New("spire-bootstrap works only with the libp2p transport")
 	}
-	return nil
-}
-
-func (s *Service) CancelAndWait() {
-	s.ctxCancel()
-	s.Transport.Wait()
+	sup := supervisor.New(log)
+	sup.Watch(tra, sysmon.New(time.Minute, log))
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
+	}
+	return sup, nil
 }

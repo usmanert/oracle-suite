@@ -18,13 +18,12 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	suite "github.com/makerdao/oracle-suite"
-	logrusFlag "github.com/makerdao/oracle-suite/pkg/log/logrus/flag"
+	suite "github.com/chronicleprotocol/oracle-suite"
+	"github.com/chronicleprotocol/oracle-suite/pkg/log/logrus/flag"
 )
 
 type options struct {
-	LogVerbosity   string
-	LogFormat      logrusFlag.FormatTypeValue
+	flag.LoggerFlag
 	ConfigFilePath string
 	Config         Config
 	GoferNoRPC     bool
@@ -40,17 +39,7 @@ func NewRootCommand(opts *options) *cobra.Command {
 		SilenceUsage:  true,
 	}
 
-	rootCmd.PersistentFlags().StringVarP(
-		&opts.LogVerbosity,
-		"log.verbosity", "v",
-		"info",
-		"verbosity level",
-	)
-	rootCmd.PersistentFlags().Var(
-		&opts.LogFormat,
-		"log.format",
-		"log format",
-	)
+	rootCmd.PersistentFlags().AddFlagSet(flag.NewLoggerFlagSet(&opts.LoggerFlag))
 	rootCmd.PersistentFlags().StringVarP(
 		&opts.ConfigFilePath,
 		"config", "c",
@@ -61,7 +50,7 @@ func NewRootCommand(opts *options) *cobra.Command {
 		&opts.GoferNoRPC,
 		"gofer.norpc",
 		false,
-		"disable the use of Gofer RPC agent",
+		"disable the use of Graph RPC agent",
 	)
 
 	return rootCmd

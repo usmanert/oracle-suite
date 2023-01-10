@@ -18,10 +18,11 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
 
 	"github.com/spf13/cobra"
 
-	"github.com/makerdao/oracle-suite/pkg/gofer"
+	"github.com/chronicleprotocol/oracle-suite/pkg/price/provider"
 )
 
 func NewPricesCmd(opts *options) *cobra.Command {
@@ -32,48 +33,53 @@ func NewPricesCmd(opts *options) *cobra.Command {
 		Short:   "Return prices for given PAIRs",
 		Long:    `Return prices for given PAIRs.`,
 		RunE: func(c *cobra.Command, args []string) (err error) {
-			srv, err := PrepareGoferClientServices(context.Background(), opts)
+			ctx, ctxCancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			sup, gof, mar, hook, err := PrepareClientServices(ctx, opts)
 			if err != nil {
+				return err
+			}
+			if err = sup.Start(ctx); err != nil {
 				return err
 			}
 			defer func() {
 				if err != nil {
 					exitCode = 1
-					_ = srv.Marshaller.Write(os.Stderr, err)
+					_ = mar.Write(os.Stderr, err)
 				}
-				_ = srv.Marshaller.Flush()
+				_ = mar.Flush()
 				// Set err to nil because error was already handled by marshaller.
 				err = nil
 			}()
-			if err = srv.Start(); err != nil {
-				return err
-			}
-			defer srv.CancelAndWait()
-
-			pairs, err := gofer.NewPairs(args...)
+			defer func() {
+				ctxCancel()
+				if sErr := <-sup.Wait(); err == nil { // Ignore sErr if another error has already occurred.
+					err = sErr
+				}
+			}()
+			pairs, err := provider.NewPairs(args...)
 			if err != nil {
 				return err
 			}
-
-			prices, err := srv.Gofer.Prices(pairs...)
+			prices, err := gof.Prices(pairs...)
 			if err != nil {
 				return err
 			}
-
+			err = hook.Check(prices)
+			if err != nil {
+				return err
+			}
 			for _, p := range prices {
-				if mErr := srv.Marshaller.Write(os.Stdout, p); mErr != nil {
-					_ = srv.Marshaller.Write(os.Stderr, mErr)
+				if mErr := mar.Write(os.Stdout, p); mErr != nil {
+					_ = mar.Write(os.Stderr, mErr)
 				}
 			}
-
-			// If any pair was returned with an error, then we should return a non-zero status code.
+			// If any pair has been returned with an error, then we should return a non-zero status code.
 			for _, p := range prices {
 				if p.Error != "" {
 					exitCode = 1
 					break
 				}
 			}
-
 			return
 		},
 	}

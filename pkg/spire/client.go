@@ -20,41 +20,38 @@ import (
 	"errors"
 	"net/rpc"
 
-	"github.com/makerdao/oracle-suite/pkg/ethereum"
-	"github.com/makerdao/oracle-suite/pkg/transport/messages"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
 
 type Client struct {
 	ctx    context.Context
-	doneCh chan struct{}
+	waitCh chan error
 
-	rpc     *rpc.Client
-	network string
-	address string
-	signer  ethereum.Signer
+	rpc    *rpc.Client
+	addr   string
+	signer ethereum.Signer
 }
 
 type ClientConfig struct {
 	Signer  ethereum.Signer
-	Network string
 	Address string
 }
 
-func NewClient(ctx context.Context, cfg ClientConfig) (*Client, error) {
-	if ctx == nil {
-		return nil, errors.New("context must not be nil")
-	}
+func NewClient(cfg ClientConfig) (*Client, error) {
 	return &Client{
-		ctx:     ctx,
-		doneCh:  make(chan struct{}),
-		network: cfg.Network,
-		address: cfg.Address,
-		signer:  cfg.Signer,
+		waitCh: make(chan error),
+		addr:   cfg.Address,
+		signer: cfg.Signer,
 	}, nil
 }
 
-func (c *Client) Start() error {
-	client, err := rpc.DialHTTP(c.network, c.address)
+func (c *Client) Start(ctx context.Context) error {
+	if ctx == nil {
+		return errors.New("context must not be nil")
+	}
+	c.ctx = ctx
+	client, err := rpc.DialHTTP("tcp", c.addr)
 	if err != nil {
 		return err
 	}
@@ -63,8 +60,9 @@ func (c *Client) Start() error {
 	return nil
 }
 
-func (c *Client) Wait() {
-	<-c.doneCh
+// Wait waits until the context is canceled or until an error occurs.
+func (c *Client) Wait() chan error {
+	return c.waitCh
 }
 
 func (c *Client) PublishPrice(price *messages.Price) error {
@@ -94,8 +92,9 @@ func (c *Client) PullPrice(assetPair string, feeder string) (*messages.Price, er
 }
 
 func (c *Client) contextCancelHandler() {
-	defer func() { close(c.doneCh) }()
+	defer func() { close(c.waitCh) }()
 	<-c.ctx.Done()
-
-	c.rpc.Close()
+	if err := c.rpc.Close(); err != nil {
+		c.waitCh <- err
+	}
 }

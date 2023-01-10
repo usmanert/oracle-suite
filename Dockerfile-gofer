@@ -1,14 +1,15 @@
-FROM golang:1-alpine as builder
+FROM golang:1.18-alpine as builder
 RUN apk --no-cache add git
 WORKDIR /go/src/gofer
 COPY . .
 RUN    export CGO_ENABLED=0 \
-    && mkdir dist \
-    && go mod download \
+    && mkdir -p dist \
+    && go mod vendor \
     && go build -o dist/gofer ./cmd/gofer
 
-FROM golang:1-alpine
+FROM alpine:3.16
 RUN apk --no-cache add ca-certificates 
 WORKDIR /root
 COPY --from=builder /go/src/gofer/dist/ /usr/local/bin/
+EXPOSE 9000
 ENTRYPOINT ["/usr/local/bin/gofer"]

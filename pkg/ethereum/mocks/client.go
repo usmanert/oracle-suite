@@ -17,32 +17,55 @@ package mocks
 
 import (
 	"context"
+	"math/big"
 
+	geth "github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/makerdao/oracle-suite/pkg/ethereum"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
 )
 
 type Client struct {
 	mock.Mock
 }
 
-func (c *Client) Call(ctx context.Context, call ethereum.Call) ([]byte, error) {
-	args := c.Called(ctx, call)
+func (e *Client) BlockNumber(ctx context.Context) (*big.Int, error) {
+	args := e.Called(ctx)
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (e *Client) Block(ctx context.Context) (*types.Block, error) {
+	args := e.Called(ctx)
+	return args.Get(0).(*types.Block), args.Error(1)
+}
+
+func (e *Client) Call(ctx context.Context, call ethereum.Call) ([]byte, error) {
+	args := e.Called(ctx, call)
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (c *Client) MultiCall(ctx context.Context, calls []ethereum.Call) ([][]byte, error) {
-	args := c.Called(ctx, calls)
+func (e *Client) CallBlocks(ctx context.Context, call ethereum.Call, blocks []int64) ([][]byte, error) {
+	args := e.Called(ctx, call, blocks)
 	return args.Get(0).([][]byte), args.Error(1)
 }
 
-func (c *Client) Storage(ctx context.Context, address ethereum.Address, key ethereum.Hash) ([]byte, error) {
-	args := c.Called(ctx, address, key)
+func (e *Client) MultiCall(ctx context.Context, calls []ethereum.Call) ([][]byte, error) {
+	args := e.Called(ctx, calls)
+	return args.Get(0).([][]byte), args.Error(1)
+}
+
+func (e *Client) Storage(ctx context.Context, address ethereum.Address, key ethereum.Hash) ([]byte, error) {
+	args := e.Called(ctx, address, key)
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (c *Client) SendTransaction(ctx context.Context, transaction *ethereum.Transaction) (*ethereum.Hash, error) {
-	args := c.Called(ctx, transaction)
+func (e *Client) SendTransaction(ctx context.Context, transaction *ethereum.Transaction) (*ethereum.Hash, error) {
+	args := e.Called(ctx, transaction)
 	return args.Get(0).(*ethereum.Hash), args.Error(1)
+}
+
+func (e *Client) FilterLogs(ctx context.Context, query geth.FilterQuery) ([]types.Log, error) {
+	args := e.Called(ctx, query)
+	return args.Get(0).([]types.Log), args.Error(1)
 }

@@ -16,34 +16,42 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"os"
+
+	"github.com/chronicleprotocol/oracle-suite/cmd/keeman/cobra"
 )
 
 func main() {
-	if err := cmd(os.Args[1:]); err != nil {
-		log.Fatalln(err)
+	opts, cmd := cobra.Command()
+	cmd.PersistentFlags().StringVarP(
+		&opts.InputFile,
+		"input",
+		"i",
+		"",
+		"input file path",
+	)
+	cmd.PersistentFlags().StringVarP(
+		&opts.OutputFile,
+		"output",
+		"o",
+		"",
+		"output file path",
+	)
+	cmd.PersistentFlags().BoolVarP(
+		&opts.Verbose,
+		"verbose",
+		"v",
+		false,
+		"verbose logging",
+	)
+	cmd.AddCommand(
+		cobra.NewDerive(opts),
+		cobra.NewDeriveTf(),
+		cobra.GenerateSeed(opts),
+		cobra.NewList(opts),
+	)
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
 	}
-}
-
-func cmd(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("missing command")
-	}
-
-	c := args[0]
-	switch c {
-	case "g", "gen", "generate":
-		return cmdGen(args)
-	case "d", "der", "derive":
-		return cmdDer(args)
-	}
-
-	return fmt.Errorf("unknown command: %s", c)
-}
-
-func fileIsEmpty(file *os.File) bool {
-	info, err := file.Stat()
-	return err != nil || info.Size() == 0 && info.Mode()&os.ModeNamedPipe == 0
+	os.Exit(0)
 }

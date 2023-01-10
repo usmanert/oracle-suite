@@ -29,7 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	pkgEthereum "github.com/makerdao/oracle-suite/pkg/ethereum"
+	pkgEthereum "github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
 )
 
 const (
@@ -81,11 +81,15 @@ type EthClient interface {
 	SuggestGasPrice(ctx context.Context) (*big.Int, error)
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
 	NetworkID(ctx context.Context) (*big.Int, error)
+	BlockNumber(ctx context.Context) (uint64, error)
+	BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error)
+	FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error)
 }
 
 // Client implements the ethereum.Client interface.
 type Client struct {
 	ethClient EthClient
+	chainID   *big.Int
 	signer    pkgEthereum.Signer
 }
 
@@ -95,6 +99,20 @@ func NewClient(ethClient EthClient, signer pkgEthereum.Signer) *Client {
 		ethClient: ethClient,
 		signer:    signer,
 	}
+}
+
+// BlockNumber implements the ethereum.Client interface.
+func (e *Client) BlockNumber(ctx context.Context) (*big.Int, error) {
+	n, err := e.ethClient.BlockNumber(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return new(big.Int).SetUint64(n), nil
+}
+
+// Block implements the ethereum.Client interface.
+func (e *Client) Block(ctx context.Context) (*types.Block, error) {
+	return e.ethClient.BlockByNumber(ctx, pkgEthereum.BlockNumberFromContext(ctx))
 }
 
 // Call implements the ethereum.Client interface.
@@ -113,7 +131,7 @@ func (e *Client) Call(ctx context.Context, call pkgEthereum.Call) ([]byte, error
 		Data:     call.Data,
 	}
 
-	resp, err := e.ethClient.CallContract(ctx, cm, nil)
+	resp, err := e.ethClient.CallContract(ctx, cm, pkgEthereum.BlockNumberFromContext(ctx))
 	if err := isRevertErr(err); err != nil {
 		return nil, err
 	}
@@ -125,6 +143,27 @@ func (e *Client) Call(ctx context.Context, call pkgEthereum.Call) ([]byte, error
 	}
 
 	return resp, err
+}
+
+func (e *Client) CallBlocks(ctx context.Context, call pkgEthereum.Call, blocks []int64) ([][]byte, error) {
+	blockNumber, err := e.BlockNumber(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block number: %w", err)
+	}
+
+	var resps [][]byte
+	for _, block := range blocks {
+		r, err := e.Call(
+			pkgEthereum.WithBlockNumber(ctx, new(big.Int).Sub(blockNumber, big.NewInt(block))),
+			call,
+		)
+		if err != nil {
+			return nil, err
+		}
+		resps = append(resps, r)
+	}
+
+	return resps, nil
 }
 
 // MultiCall implements the ethereum.Client interface.
@@ -140,8 +179,7 @@ func (e *Client) MultiCall(ctx context.Context, calls []pkgEthereum.Call) ([][]b
 			Data:    c.Data,
 		})
 	}
-
-	chainID, err := e.ethClient.NetworkID(ctx)
+	chainID, err := e.getChainID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -161,13 +199,12 @@ func (e *Client) MultiCall(ctx context.Context, calls []pkgEthereum.Call) ([][]b
 	if err != nil {
 		return nil, err
 	}
-
 	return results[1].([][]byte), nil
 }
 
 // Storage implements the ethereum.Client interface.
 func (e *Client) Storage(ctx context.Context, address pkgEthereum.Address, key pkgEthereum.Hash) ([]byte, error) {
-	return e.ethClient.StorageAt(ctx, address, key, nil)
+	return e.ethClient.StorageAt(ctx, address, key, pkgEthereum.BlockNumberFromContext(ctx))
 }
 
 // SendTransaction implements the ethereum.Client interface.
@@ -210,7 +247,7 @@ func (e *Client) SendTransaction(ctx context.Context, transaction *pkgEthereum.T
 		tx.MaxFee = new(big.Int).Mul(suggestedGasPrice, big.NewInt(2))
 	}
 	if tx.ChainID == nil {
-		tx.ChainID, err = e.ethClient.NetworkID(ctx)
+		tx.ChainID, err = e.getChainID(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -228,6 +265,22 @@ func (e *Client) SendTransaction(ctx context.Context, transaction *pkgEthereum.T
 		return &hash, e.ethClient.SendTransaction(ctx, stx)
 	}
 	return nil, ErrInvalidSignedTxType
+}
+
+// FilterLogs implements the ethereum.Client interface.
+func (e *Client) FilterLogs(ctx context.Context, query ethereum.FilterQuery) ([]types.Log, error) {
+	return e.ethClient.FilterLogs(ctx, query)
+}
+
+func (e *Client) getChainID(ctx context.Context) (*big.Int, error) {
+	if e.chainID == nil {
+		var err error
+		e.chainID, err = e.ethClient.NetworkID(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return e.chainID, nil
 }
 
 func isRevertResp(resp []byte) error {

@@ -19,7 +19,6 @@ import (
 	"context"
 	"os"
 	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -31,22 +30,15 @@ func NewAgentCmd(opts *options) *cobra.Command {
 		Short: "",
 		Long:  ``,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			var err error
-			ctx := context.Background()
-			srv, err := PrepareAgentServices(ctx, opts)
+			ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt)
+			sup, err := PrepareAgentServices(ctx, opts)
 			if err != nil {
 				return err
 			}
-			if err = srv.Start(); err != nil {
+			if err = sup.Start(ctx); err != nil {
 				return err
 			}
-			defer srv.CancelAndWait()
-
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-			<-c
-
-			return nil
+			return <-sup.Wait()
 		},
 	}
 }

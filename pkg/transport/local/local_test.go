@@ -21,18 +21,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/makerdao/oracle-suite/pkg/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
 )
 
 type testMsg struct {
 	Val string
 }
 
-func (t *testMsg) Marshall() ([]byte, error) {
+func (t *testMsg) MarshallBinary() ([]byte, error) {
 	return []byte(t.Val), nil
 }
 
-func (t *testMsg) Unmarshall(bytes []byte) error {
+func (t *testMsg) UnmarshallBinary(bytes []byte) error {
 	t.Val = string(bytes)
 	return nil
 }
@@ -41,7 +41,8 @@ func TestLocal_Broadcast(t *testing.T) {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	defer ctxCancel()
 
-	l := New(ctx, 1, map[string]transport.Message{"foo": (*testMsg)(nil)})
+	l := New([]byte("test"), 1, map[string]transport.Message{"foo": (*testMsg)(nil)})
+	_ = l.Start(ctx)
 
 	// Valid message:
 	vm := &testMsg{Val: "bar"}
@@ -52,7 +53,8 @@ func TestLocal_Messages(t *testing.T) {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	defer ctxCancel()
 
-	l := New(ctx, 1, map[string]transport.Message{"foo": (*testMsg)(nil)})
+	l := New([]byte("test"), 1, map[string]transport.Message{"foo": (*testMsg)(nil)})
+	_ = l.Start(ctx)
 
 	// Valid message:
 	assert.NoError(t, l.Broadcast("foo", &testMsg{Val: "bar"}))

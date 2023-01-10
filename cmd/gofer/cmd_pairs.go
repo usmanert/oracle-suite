@@ -18,10 +18,11 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
 
 	"github.com/spf13/cobra"
 
-	"github.com/makerdao/oracle-suite/pkg/gofer"
+	"github.com/chronicleprotocol/oracle-suite/pkg/price/provider"
 )
 
 func NewPairsCmd(opts *options) *cobra.Command {
@@ -32,40 +33,42 @@ func NewPairsCmd(opts *options) *cobra.Command {
 		Short:   "List all supported asset pairs",
 		Long:    `List all supported asset pairs.`,
 		RunE: func(_ *cobra.Command, args []string) (err error) {
-			srv, err := PrepareGoferClientServices(context.Background(), opts)
+			ctx, ctxCancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			sup, gof, mar, _, err := PrepareClientServices(ctx, opts)
 			if err != nil {
+				return err
+			}
+			if err = sup.Start(ctx); err != nil {
 				return err
 			}
 			defer func() {
 				if err != nil {
 					exitCode = 1
-					_ = srv.Marshaller.Write(os.Stderr, err)
+					_ = mar.Write(os.Stderr, err)
 				}
-				_ = srv.Marshaller.Flush()
+				_ = mar.Flush()
 				// Set err to nil because error was already handled by marshaller.
 				err = nil
 			}()
-			if err = srv.Start(); err != nil {
-				return err
-			}
-			defer srv.CancelAndWait()
-
-			pairs, err := gofer.NewPairs(args...)
+			defer func() {
+				ctxCancel()
+				if sErr := <-sup.Wait(); err == nil { // Ignore sErr if another error has already occurred.
+					err = sErr
+				}
+			}()
+			pairs, err := provider.NewPairs(args...)
 			if err != nil {
 				return err
 			}
-
-			models, err := srv.Gofer.Models(pairs...)
+			models, err := gof.Models(pairs...)
 			if err != nil {
 				return err
 			}
-
 			for _, p := range models {
-				if mErr := srv.Marshaller.Write(os.Stdout, p); mErr != nil {
-					_ = srv.Marshaller.Write(os.Stderr, mErr)
+				if mErr := mar.Write(os.Stdout, p); mErr != nil {
+					_ = mar.Write(os.Stderr, mErr)
 				}
 			}
-
 			return
 		},
 	}

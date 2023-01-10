@@ -1,0 +1,83 @@
+env:
+  - GO111MODULE=on
+  - CGO_ENABLED=0
+
+builds:
+  - main: ./cmd/gofer
+    id: "gofer"
+    binary: gofer
+    goos:
+      - linux
+      - darwin
+
+  - main: ./cmd/spire
+    id: "spire"
+    binary: spire
+    goos:
+      - linux
+      # - darwin
+
+  - main: ./cmd/leeloo
+    id: "leeloo"
+    binary: leeloo
+    goos:
+      - linux
+      # - darwin
+
+  - main: ./cmd/lair
+    id: "lair"
+    binary: lair
+    goos:
+      - linux
+      # - darwin
+
+  - main: ./cmd/ssb-rpc-client
+    id: "ssb-rpc-client"
+    binary: ssb-rpc-client
+    goos:
+      - linux
+      - darwin
+
+  - main: ./cmd/rpc-splitter
+    id: "rpc-splitter"
+    binary: rpc-splitter
+    goos:
+      - linux
+      - darwin
+
+archives:
+  - 
+    id: "gofer"
+    builds:
+      - gofer
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  - 
+    id: "spire"
+    builds:
+      - spire
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  -
+    id: "leeloo"
+    builds:
+      - leeloo
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  -
+    id: "lair"
+    builds:
+      - lair
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  -
+    id: "ssb-rpc-client"
+    builds:
+      - ssb-rpc-client
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+  -
+    id: "rpc-splitter"
+    builds:
+      - rpc-splitter
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

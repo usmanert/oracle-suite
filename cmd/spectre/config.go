@@ -18,19 +18,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/sirupsen/logrus"
-
-	"github.com/makerdao/oracle-suite/internal/config"
-	ethereumConfig "github.com/makerdao/oracle-suite/internal/config/ethereum"
-	feedsConfig "github.com/makerdao/oracle-suite/internal/config/feeds"
-	spectreConfig "github.com/makerdao/oracle-suite/internal/config/spectre"
-	transportConfig "github.com/makerdao/oracle-suite/internal/config/transport"
-	"github.com/makerdao/oracle-suite/pkg/datastore"
-	"github.com/makerdao/oracle-suite/pkg/log"
-	logLogrus "github.com/makerdao/oracle-suite/pkg/log/logrus"
-	"github.com/makerdao/oracle-suite/pkg/spectre"
-	"github.com/makerdao/oracle-suite/pkg/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/config"
+	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
+	feedsConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/feeds"
+	loggerConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/logger"
+	spectreConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/spectre"
+	transportConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/supervisor"
+	"github.com/chronicleprotocol/oracle-suite/pkg/sysmon"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
 
 type Config struct {
@@ -38,124 +37,68 @@ type Config struct {
 	Ethereum  ethereumConfig.Ethereum   `json:"ethereum"`
 	Spectre   spectreConfig.Spectre     `json:"spectre"`
 	Feeds     feedsConfig.Feeds         `json:"feeds"`
+	Logger    loggerConfig.Logger       `json:"logger"`
 }
 
-type Dependencies struct {
-	Context context.Context
-	Logger  log.Logger
-}
-
-func (c *Config) Configure(d Dependencies) (transport.Transport, datastore.Datastore, *spectre.Spectre, error) {
-	sig, err := c.Ethereum.ConfigureSigner()
+func PrepareServices(ctx context.Context, opts *options) (*supervisor.Supervisor, error) {
+	err := config.ParseFile(&opts.Config, opts.ConfigFilePath)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`config error: %w`, err)
 	}
-	cli, err := c.Ethereum.ConfigureEthereumClient(sig)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	fed, err := c.Feeds.Addresses()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	tra, err := c.Transport.Configure(transportConfig.Dependencies{
-		Context: d.Context,
-		Signer:  sig,
-		Feeds:   fed,
-		Logger:  d.Logger,
+	log, err := opts.Config.Logger.Configure(loggerConfig.Dependencies{
+		AppName:    "spectre",
+		BaseLogger: opts.Logger(),
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-	dat, err := c.Spectre.ConfigureDatastore(spectreConfig.DatastoreDependencies{
-		Context:   d.Context,
+	sig, err := opts.Config.Ethereum.ConfigureSigner()
+	if err != nil {
+		return nil, fmt.Errorf(`ethereum config error: %w`, err)
+	}
+	cli, err := opts.Config.Ethereum.ConfigureEthereumClient(sig, log)
+	if err != nil {
+		return nil, fmt.Errorf(`ethereum config error: %w`, err)
+	}
+	fed, err := opts.Config.Feeds.Addresses()
+	if err != nil {
+		return nil, fmt.Errorf(`feeds config error: %w`, err)
+	}
+	tra, err := opts.Config.Transport.Configure(transportConfig.Dependencies{
+		Signer: sig,
+		Feeds:  fed,
+		Logger: log,
+	},
+		map[string]transport.Message{
+			messages.PriceV0MessageName: (*messages.Price)(nil),
+			messages.PriceV1MessageName: (*messages.Price)(nil),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf(`transport config error: %w`, err)
+	}
+	pst, err := opts.Config.Spectre.ConfigurePriceStore(spectreConfig.PriceStoreDependencies{
 		Signer:    sig,
 		Transport: tra,
 		Feeds:     fed,
-		Logger:    d.Logger,
+		Logger:    log,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`spectre config error: %w`, err)
 	}
-	spe, err := c.Spectre.ConfigureSpectre(spectreConfig.Dependencies{
-		Context:        d.Context,
+	spe, err := opts.Config.Spectre.ConfigureSpectre(spectreConfig.Dependencies{
 		Signer:         sig,
-		Datastore:      dat,
+		PriceStore:     pst,
 		EthereumClient: cli,
-		Logger:         d.Logger,
+		Logger:         log,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, fmt.Errorf(`spectre config error: %w`, err)
 	}
-	return tra, dat, spe, nil
-}
-
-type Services struct {
-	ctxCancel context.CancelFunc
-	Transport transport.Transport
-	Datastore datastore.Datastore
-	Spectre   *spectre.Spectre
-}
-
-func PrepareServices(ctx context.Context, opts *options) (*Services, error) {
-	var err error
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			ctxCancel()
-		}
-	}()
-
-	// Load config file:
-	err = config.ParseFile(&opts.Config, opts.ConfigFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse configuration file: %w", err)
+	sup := supervisor.New(log)
+	sup.Watch(tra, pst, spe, sysmon.New(time.Minute, log))
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
 	}
-
-	// Logger:
-	ll, err := logrus.ParseLevel(opts.LogVerbosity)
-	if err != nil {
-		return nil, err
-	}
-	lr := logrus.New()
-	lr.SetLevel(ll)
-	lr.SetFormatter(opts.LogFormat.Formatter())
-	logger := logLogrus.New(lr)
-
-	// Services:
-	tra, dat, spe, err := opts.Config.Configure(Dependencies{
-		Context: ctx,
-		Logger:  logger,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to load Spectre configuration: %w", err)
-	}
-
-	return &Services{
-		ctxCancel: ctxCancel,
-		Transport: tra,
-		Datastore: dat,
-		Spectre:   spe,
-	}, nil
-}
-
-func (s *Services) Start() error {
-	var err error
-	if err = s.Transport.Start(); err != nil {
-		return err
-	}
-	if err = s.Datastore.Start(); err != nil {
-		return err
-	}
-	if err = s.Spectre.Start(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *Services) CancelAndWait() {
-	s.ctxCancel()
-	s.Transport.Wait()
-	s.Datastore.Wait()
-	s.Spectre.Wait()
+	return sup, nil
 }

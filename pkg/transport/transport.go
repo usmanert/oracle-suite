@@ -15,35 +15,41 @@
 
 package transport
 
-// ReceivedMessage contains a Message received from a Transport with
+import "context"
+
+// ReceivedMessage contains a Message received from Transport with
 // an additional data.
 type ReceivedMessage struct {
 	// Message contains the message content. It is nil when the Error field
 	// is not nil.
 	Message Message
+	// Author is the ID of the author of the message.
+	Author []byte
 	// Data contains an optional data associated with the message. A type of
 	// the data is different depending on a transport implementation.
 	Data interface{}
-	// Error contains an optional error returned by a transport.
+	// Error contains an optional error returned by transport.
 	Error error
 }
 
 type Message interface {
-	Marshall() ([]byte, error)
-	Unmarshall([]byte) error
+	MarshallBinary() ([]byte, error)
+	UnmarshallBinary([]byte) error
 }
 
 // Transport is the interface for different implementations of a
 // publish–subscribe messaging solutions for the Oracle network.
 type Transport interface {
+	// ID returns an identity used to sign messages.
+	ID() []byte
+	// Broadcast sends a message with a given topic.
 	Broadcast(topic string, message Message) error
-	// Messages returns a channel that will deliver incoming messages. Note,
-	// that only messages for subscribed topics will be supported by this
-	// method, for unsubscribed topic nil will be returned. In case of an
-	// error, error will be returned in a ReceivedMessage structure.
+	// Messages returns a channel that will deliver incoming messages.
+	// In case of an error, error will be returned in a ReceivedMessage
+	// structure.
 	Messages(topic string) chan ReceivedMessage
 	// Start starts listening for messages.
-	Start() error
-	// Wait waits until transport's context is cancelled.
-	Wait()
+	Start(ctx context.Context) error
+	// Wait waits until the context is canceled or until an error occurs.
+	Wait() chan error
 }

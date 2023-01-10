@@ -18,17 +18,18 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	logrusFlag "github.com/makerdao/oracle-suite/pkg/log/logrus/flag"
-
-	suite "github.com/makerdao/oracle-suite"
+	suite "github.com/chronicleprotocol/oracle-suite"
+	"github.com/chronicleprotocol/oracle-suite/pkg/log/logrus/flag"
 )
 
 type options struct {
-	Listen       string
-	EnableCORS   bool
-	EthRPCURLs   []string
-	LogVerbosity string
-	LogFormat    logrusFlag.FormatTypeValue
+	Listen             string
+	EnableCORS         bool
+	GracefulTimeoutSec int
+	TotalTimeoutSec    int
+	MaxBlocksBehind    int
+	EthRPCURLs         []string
+	flag.LoggerFlag
 }
 
 func NewRootCommand(opts *options) *cobra.Command {
@@ -41,17 +42,7 @@ func NewRootCommand(opts *options) *cobra.Command {
 		SilenceUsage:  true,
 	}
 
-	rootCmd.PersistentFlags().StringVarP(
-		&opts.LogVerbosity,
-		"log.verbosity", "v",
-		"info",
-		"verbosity level",
-	)
-	rootCmd.PersistentFlags().Var(
-		&opts.LogFormat,
-		"log.format",
-		"log format",
-	)
+	rootCmd.PersistentFlags().AddFlagSet(flag.NewLoggerFlagSet(&opts.LoggerFlag))
 	rootCmd.PersistentFlags().StringVarP(
 		&opts.Listen,
 		"listen",
@@ -66,11 +57,29 @@ func NewRootCommand(opts *options) *cobra.Command {
 		false,
 		"enables CORS requests for all origins",
 	)
+	rootCmd.PersistentFlags().IntVarP(
+		&opts.GracefulTimeoutSec,
+		"graceful-timeout", "g",
+		1,
+		"set timeout to graceful finish requests to slower RPC nodes",
+	)
+	rootCmd.PersistentFlags().IntVarP(
+		&opts.TotalTimeoutSec,
+		"timeout", "t",
+		10,
+		"set request timeout in seconds",
+	)
+	rootCmd.PersistentFlags().IntVarP(
+		&opts.TotalTimeoutSec,
+		"max-blocks-behind", "b",
+		10,
+		"determines how far one node can be behind the last known block",
+	)
 	rootCmd.PersistentFlags().StringSliceVar(
 		&opts.EthRPCURLs,
 		"eth-rpc",
 		[]string{},
-		"list of ethereum nodes",
+		"list of ethereum RPC nodes",
 	)
 	err := rootCmd.MarkPersistentFlagRequired("eth-rpc")
 	if err != nil {

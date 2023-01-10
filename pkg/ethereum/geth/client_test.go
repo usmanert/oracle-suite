@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	pkgEthereum "github.com/makerdao/oracle-suite/pkg/ethereum"
-	"github.com/makerdao/oracle-suite/pkg/ethereum/geth/mocks"
+	pkgEthereum "github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
+	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum/geth/mocks"
 )
 
 var clientContractAddress = common.HexToAddress("0x0E30F0FC91FDbc4594b1e2E5d64E6F1f94cAB23D")
@@ -67,7 +67,7 @@ func TestClient_Call(t *testing.T) {
 		pkgEthereum.Call{Address: clientContractAddress, Data: clientCallData},
 	)
 
-	cm := ethClient.Calls[0].Arguments.Get(1).(ethereum.CallMsg)
+	cm := ethClient.Calls()[0].Arguments.Get(1).(ethereum.CallMsg)
 
 	assert.Equal(t, resp, clientCallResp)
 	assert.Equal(t, clientCallData, cm.Data)
@@ -149,7 +149,7 @@ func TestClient_MultiCall(t *testing.T) {
 		},
 	)
 
-	cm := ethClient.Calls[1].Arguments.Get(1).(ethereum.CallMsg)
+	cm := ethClient.Calls()[1].Arguments.Get(1).(ethereum.CallMsg)
 
 	assert.NotNil(t, resp)
 	assert.Len(t, resp, 4)
@@ -202,7 +202,7 @@ func TestClient_SendTransaction(t *testing.T) {
 	}
 
 	hash, err := client.SendTransaction(context.Background(), tx)
-	stx := ethClient.Calls[0].Arguments.Get(1).(*types.Transaction)
+	stx := ethClient.Calls()[0].Arguments.Get(1).(*types.Transaction)
 
 	assert.NotNil(t, hash)
 	assert.NoError(t, err)
@@ -255,7 +255,7 @@ func TestClient_SendTransaction_Minimal(t *testing.T) {
 	}
 
 	hash, err := client.SendTransaction(context.Background(), tx)
-	stx := ethClient.Calls[4].Arguments.Get(1).(*types.Transaction)
+	stx := ethClient.Calls()[4].Arguments.Get(1).(*types.Transaction)
 
 	assert.NotNil(t, hash)
 	assert.NoError(t, err)

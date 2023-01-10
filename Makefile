@@ -31,7 +31,7 @@ lint:
 .PHONY: lint
 
 test:
-	$(GO) test ./... -tags $(TEST_FLAGS)
+	$(GO) test -v $$(go list ./... | grep -v /e2e/) -tags $(TEST_FLAGS)
 .PHONY: test
 
 test-api: export GOFER_TEST_API_CALLS = 1
@@ -96,4 +96,4 @@ ifneq ($(shell git status --porcelain),)
 	VERSION := $(VERSION)-dirty
 endif
 
-LDFLAGS := -ldflags "-X github.com/makerdao/oracle-suite.Version=$(VERSION)"
+LDFLAGS := -ldflags "-X github.com/chronicleprotocol/oracle-suite.Version=$(VERSION)"

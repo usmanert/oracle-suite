@@ -19,10 +19,11 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/signal"
 
 	"github.com/spf13/cobra"
 
-	"github.com/makerdao/oracle-suite/pkg/transport/messages"
+	"github.com/chronicleprotocol/oracle-suite/pkg/transport/messages"
 )
 
 func NewPushCmd(opts *options) *cobra.Command {
@@ -44,18 +45,21 @@ func NewPushPriceCmd(opts *options) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		Short: "",
 		Long:  ``,
-		RunE: func(_ *cobra.Command, args []string) error {
-			var err error
-			ctx := context.Background()
-			srv, err := PrepareClientServices(ctx, opts)
+		RunE: func(_ *cobra.Command, args []string) (err error) {
+			ctx, ctxCancel := signal.NotifyContext(context.Background(), os.Interrupt)
+			sup, cli, err := PrepareClientServices(ctx, opts)
 			if err != nil {
 				return err
 			}
-			if err = srv.Start(); err != nil {
+			if err = sup.Start(ctx); err != nil {
 				return err
 			}
-			defer srv.CancelAndWait()
-
+			defer func() {
+				ctxCancel()
+				if sErr := <-sup.Wait(); err == nil { // Ignore sErr if another error has already occurred.
+					err = sErr
+				}
+			}()
 			in := os.Stdin
 			if len(args) == 1 {
 				in, err = os.Open(args[0])
@@ -63,26 +67,22 @@ func NewPushPriceCmd(opts *options) *cobra.Command {
 					return err
 				}
 			}
-
 			// Read JSON and parse it:
 			input, err := io.ReadAll(in)
 			if err != nil {
 				return err
 			}
-
 			msg := &messages.Price{}
 			err = msg.Unmarshall(input)
 			if err != nil {
 				return err
 			}
-
 			// Send price message to RPC client:
-			err = srv.Client.PublishPrice(msg)
+			err = cli.PublishPrice(msg)
 			if err != nil {
 				return err
 			}
-
-			return nil
+			return
 		},
 	}
 }

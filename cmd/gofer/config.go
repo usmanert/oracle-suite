@@ -18,149 +18,95 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/chronicleprotocol/oracle-suite/pkg/price/provider"
+	"github.com/chronicleprotocol/oracle-suite/pkg/price/provider/marshal"
 
-	"github.com/makerdao/oracle-suite/internal/config"
-	ethereumConfig "github.com/makerdao/oracle-suite/internal/config/ethereum"
-	goferConfig "github.com/makerdao/oracle-suite/internal/config/gofer"
-	"github.com/makerdao/oracle-suite/internal/gofer/marshal"
-	pkgGofer "github.com/makerdao/oracle-suite/pkg/gofer"
-	"github.com/makerdao/oracle-suite/pkg/gofer/rpc"
-	"github.com/makerdao/oracle-suite/pkg/log"
-	logLogrus "github.com/makerdao/oracle-suite/pkg/log/logrus"
+	"github.com/chronicleprotocol/oracle-suite/pkg/config"
+	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
+	goferConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/gofer"
+	loggerConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/logger"
+	"github.com/chronicleprotocol/oracle-suite/pkg/supervisor"
+	"github.com/chronicleprotocol/oracle-suite/pkg/sysmon"
 )
 
 type Config struct {
 	Ethereum ethereumConfig.Ethereum `json:"ethereum"`
 	Gofer    goferConfig.Gofer       `json:"gofer"`
+	Logger   loggerConfig.Logger     `json:"logger"`
 }
 
-func (c *Config) Configure(ctx context.Context, logger log.Logger, noRPC bool) (pkgGofer.Gofer, error) {
-	cli, err := c.Ethereum.ConfigureEthereumClient(nil)
+func PrepareClientServices(
+	ctx context.Context,
+	opts *options,
+) (*supervisor.Supervisor, provider.Provider, marshal.Marshaller, provider.PriceHook, error) {
+
+	err := config.ParseFile(&opts.Config, opts.ConfigFilePath)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, fmt.Errorf(`config error: %w`, err)
 	}
-	return c.Gofer.ConfigureGofer(ctx, cli, logger, noRPC)
-}
-
-func (c *Config) ConfigureRPCAgent(ctx context.Context, logger log.Logger) (*rpc.Agent, error) {
-	cli, err := c.Ethereum.ConfigureEthereumClient(nil)
+	log, err := opts.Config.Logger.Configure(loggerConfig.Dependencies{
+		AppName:    "gofer",
+		BaseLogger: opts.Logger(),
+	})
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-	return c.Gofer.ConfigureRPCAgent(ctx, cli, logger)
-}
-
-type GoferClientServices struct {
-	ctxCancel  context.CancelFunc
-	Gofer      pkgGofer.Gofer
-	Marshaller marshal.Marshaller
-}
-
-func PrepareGoferClientServices(ctx context.Context, opts *options) (*GoferClientServices, error) {
-	var err error
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			ctxCancel()
-		}
-	}()
-
-	// Load config file:
-	err = config.ParseFile(&opts.Config, opts.ConfigFilePath)
+	cli, err := opts.Config.Ethereum.ConfigureEthereumClient(nil, log)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse configuration file: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-
-	// Logger:
-	ll, err := logrus.ParseLevel(opts.LogVerbosity)
+	gof, err := opts.Config.Gofer.ConfigureGofer(cli, log, opts.NoRPC)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, fmt.Errorf(`gofer config error: %w`, err)
 	}
-	lr := logrus.New()
-	lr.SetLevel(ll)
-	lr.SetFormatter(opts.LogFormat.Formatter())
-	logger := logLogrus.New(lr)
-
-	// Services:
-	gof, err := opts.Config.Configure(ctx, logger, opts.NoRPC)
+	hook, err := opts.Config.Gofer.ConfigurePriceHook(ctx, cli)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load Gofer configuration: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf(`price hook config error: %w`, err)
 	}
 	mar, err := marshal.NewMarshal(opts.Format.format)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, fmt.Errorf(`invalid format option: %w`, err)
 	}
-
-	return &GoferClientServices{
-		ctxCancel:  ctxCancel,
-		Gofer:      gof,
-		Marshaller: mar,
-	}, nil
-}
-
-func (s *GoferClientServices) Start() error {
-	if g, ok := s.Gofer.(pkgGofer.StartableGofer); ok {
-		return g.Start()
+	sup := supervisor.New(log)
+	if g, ok := gof.(supervisor.Service); ok {
+		sup.Watch(g)
 	}
-	return nil
-}
-
-func (s *GoferClientServices) CancelAndWait() {
-	s.ctxCancel()
-	if g, ok := s.Gofer.(pkgGofer.StartableGofer); ok {
-		g.Wait()
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
 	}
+	return sup, gof, mar, hook, nil
 }
 
-type GoferAgentService struct {
-	ctxCancel context.CancelFunc
-	Agent     *rpc.Agent
-}
-
-func PrepareGoferAgentService(ctx context.Context, opts *options) (*GoferAgentService, error) {
-	var err error
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			ctxCancel()
-		}
-	}()
-
-	// Load config file:
-	err = config.ParseFile(&opts.Config, opts.ConfigFilePath)
+func PrepareAgentServices(ctx context.Context, opts *options) (*supervisor.Supervisor, error) {
+	err := config.ParseFile(&opts.Config, opts.ConfigFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse configuration file: %w", err)
+		return nil, fmt.Errorf(`config error: %w`, err)
 	}
-
-	// Logger:
-	ll, err := logrus.ParseLevel(opts.LogVerbosity)
+	log, err := opts.Config.Logger.Configure(loggerConfig.Dependencies{
+		AppName:    "gofer",
+		BaseLogger: opts.Logger(),
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(`logger config error: %w`, err)
 	}
-	lr := logrus.New()
-	lr.SetLevel(ll)
-	lr.SetFormatter(opts.LogFormat.Formatter())
-	logger := logLogrus.New(lr)
-
-	// Services:
-	age, err := opts.Config.ConfigureRPCAgent(ctx, logger)
+	cli, err := opts.Config.Ethereum.ConfigureEthereumClient(nil, log)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load Gofer configuration: %w", err)
+		return nil, fmt.Errorf(`ethereum config error: %w`, err)
 	}
-
-	return &GoferAgentService{
-		ctxCancel: ctxCancel,
-		Agent:     age,
-	}, nil
-}
-
-func (s *GoferAgentService) Start() error {
-	return s.Agent.Start()
-}
-
-func (s *GoferAgentService) CancelAndWait() {
-	s.ctxCancel()
-	s.Agent.Wait()
+	gof, err := opts.Config.Gofer.ConfigureAsyncGofer(cli, log)
+	if err != nil {
+		return nil, fmt.Errorf(`gofer config error: %w`, err)
+	}
+	age, err := opts.Config.Gofer.ConfigureRPCAgent(cli, gof, log)
+	if err != nil {
+		return nil, fmt.Errorf(`gofer config error: %w`, err)
+	}
+	sup := supervisor.New(log)
+	sup.Watch(gof.(supervisor.Service), age, sysmon.New(time.Minute, log))
+	if l, ok := log.(supervisor.Service); ok {
+		sup.Watch(l)
+	}
+	return sup, nil
 }
