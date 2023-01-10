@@ -18,11 +18,10 @@ package origins
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/makerdao/oracle-suite/internal/query"
+	"github.com/chronicleprotocol/oracle-suite/pkg/util/query"
 	"math/big"
 	"time"
 
-	//"strconv"
 	"strings"
 )
 
