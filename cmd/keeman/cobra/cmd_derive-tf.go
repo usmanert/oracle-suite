@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -89,6 +90,20 @@ func NewDeriveTf() *cobra.Command {
 					return err
 				}
 				addr = id.String()
+			} else if strings.HasPrefix(q.Format, FormatOnionV3+"-") {
+				var o onion
+				if err := json.Unmarshal(b, &o); err != nil {
+					return err
+				}
+				addr = o.Hostname
+				switch q.Format {
+				case FormatOnionV3Adr:
+					b = []byte(addr)
+				case FormatOnionV3Pub:
+					b = o.PublicKey
+				case FormatOnionV3Sec:
+					b = o.SecretKey
+				}
 			}
 			fmt.Printf(
 				`{"output":"%s","path":"%s","addr":"%s"}`,
@@ -114,4 +129,11 @@ type ssbSecret struct {
 	ID      refs.FeedRef `json:"id"`
 	Private string       `json:"private"`
 	Public  string       `json:"public"`
+}
+
+type onion struct {
+	Prefix    string `json:"prefix"`
+	Hostname  string `json:"hostname"`
+	PublicKey []byte `json:"public_key"`
+	SecretKey []byte `json:"secret_key"`
 }
