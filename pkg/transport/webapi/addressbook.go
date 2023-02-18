@@ -17,6 +17,24 @@ type AddressBook interface {
 	Consumers(ctx context.Context) ([]string, error)
 }
 
+// StaticAddressBook is an implementation of AddressBook that returns a static
+// list of addresses.
+type StaticAddressBook struct {
+	addresses []string
+}
+
+// NewStaticAddressBook creates a new instance of StaticAddressBook.
+func NewStaticAddressBook(addresses []string) *StaticAddressBook {
+	return &StaticAddressBook{
+		addresses: addresses,
+	}
+}
+
+// Consumers implements the AddressBook interface.
+func (c *StaticAddressBook) Consumers(ctx context.Context) ([]string, error) {
+	return c.addresses, nil
+}
+
 // EthereumAddressBook is an AddressBook implementation that uses an Ethereum
 // contract to store the list of addresses.
 type EthereumAddressBook struct {

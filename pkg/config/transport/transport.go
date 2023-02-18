@@ -50,6 +50,11 @@ const (
 	WebAPI = "webapi"
 )
 
+const (
+	EthereumAddressBook = "ethereum"
+	StaticAddressBook   = "static"
+)
+
 var p2pTransportFactory = func(cfg libp2p.Config) (transport.Transport, error) {
 	return libp2p.New(cfg)
 }
@@ -81,10 +86,20 @@ type ScuttlebuttCapsConfig struct {
 }
 
 type WebAPIConfig struct {
-	ListenAddr      string                  `yaml:"listenAddr"`
-	Socks5ProxyAddr string                  `yaml:"socks5ProxyAddr"`
-	AddressBookAddr ethereum.Address        `yaml:"addressBookAddr"`
-	Ethereum        ethereumConfig.Ethereum `yaml:"ethereum"`
+	ListenAddr          string                           `yaml:"listenAddr"`
+	Socks5ProxyAddr     string                           `yaml:"socks5ProxyAddr"`
+	AddressBookType     string                           `yaml:"addressBookType"`
+	EthereumAddressBook *WebAPIEthereumAddressBookConfig `yaml:"ethereumAddressBook"`
+	StaticAddressBook   *WebAPIStaticAddressBookConfig   `yaml:"staticAddressBook"`
+}
+
+type WebAPIStaticAddressBookConfig struct {
+	RemoteAddrs []string `yaml:"remoteAddrs"`
+}
+
+type WebAPIEthereumAddressBookConfig struct {
+	AddressBookAddr ethereum.Address `yaml:"addressBookAddr"`
+	Ethereum        ethereumConfig.Ethereum
 }
 
 type Dependencies struct {
@@ -168,8 +183,27 @@ func (c *Transport) configureTransport(
 		if c.WebAPI.ListenAddr == "" {
 			return nil, errors.New("webapi listen addr not set")
 		}
-		if c.WebAPI.AddressBookAddr == (ethereum.Address{}) {
-			return nil, errors.New("webapi address book addr not set")
+		var ab webapi.AddressBook
+		switch c.WebAPI.AddressBookType {
+		case EthereumAddressBook:
+			if c.WebAPI.EthereumAddressBook == nil {
+				return nil, errors.New("ethereum address book config not set")
+			}
+			cli, err := c.WebAPI.EthereumAddressBook.Ethereum.ConfigureEthereumClient(d.Signer, d.Logger)
+			if err != nil {
+				return nil, fmt.Errorf("cannot configure ethereum client: %w", err)
+			}
+			ab = webapi.NewEthereumAddressBook(cli, c.WebAPI.EthereumAddressBook.AddressBookAddr, time.Hour)
+		case StaticAddressBook:
+			if c.WebAPI.StaticAddressBook == nil {
+				return nil, errors.New("static address book config not set")
+			}
+			ab = webapi.NewStaticAddressBook(c.WebAPI.StaticAddressBook.RemoteAddrs)
+		default:
+			if c.WebAPI.AddressBookType == "" {
+				return nil, errors.New("address book type not set")
+			}
+			return nil, fmt.Errorf("invalid address book type: %s", c.WebAPI.AddressBookType)
 		}
 		httpClient := http.DefaultClient
 		if len(c.WebAPI.Socks5ProxyAddr) != 0 {
@@ -183,11 +217,6 @@ func (c *Transport) configureTransport(
 				},
 			}
 		}
-		cli, err := c.WebAPI.Ethereum.ConfigureEthereumClient(d.Signer, d.Logger)
-		if err != nil {
-			return nil, fmt.Errorf("cannot configure ethereum client: %w", err)
-		}
-		ab := webapi.NewEthereumAddressBook(cli, c.WebAPI.AddressBookAddr, time.Hour)
 		tra, err := webapi.New(webapi.Config{
 			ListenAddr:      c.WebAPI.ListenAddr,
 			AddressBook:     ab,
