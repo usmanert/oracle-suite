@@ -88,7 +88,7 @@ type ScuttlebuttCapsConfig struct {
 type WebAPIConfig struct {
 	ListenAddr          string                           `yaml:"listenAddr"`
 	Socks5ProxyAddr     string                           `yaml:"socks5ProxyAddr"`
-	AddressBookType     string                           `yaml:"addressBookType"`
+	AddressBookType     any                              `yaml:"addressBookType"`
 	EthereumAddressBook *WebAPIEthereumAddressBookConfig `yaml:"ethereumAddressBook"`
 	StaticAddressBook   *WebAPIStaticAddressBookConfig   `yaml:"staticAddressBook"`
 }
@@ -183,8 +183,21 @@ func (c *Transport) configureTransport(
 		if c.WebAPI.ListenAddr == "" {
 			return nil, errors.New("webapi listen addr not set")
 		}
+		var types []string
+		switch varType := c.WebAPI.AddressBookType.(type) {
+		case string:
+			types = []string{varType}
+		case []any:
+			for _, t := range varType {
+				if s, ok := t.(string); ok {
+					types = append(types, s)
+					continue
+				}
+				return nil, fmt.Errorf("transport config error: invalid address book type: %v", t)
+			}
+		}
 		var addressBooks []webapi.AddressBook
-		for _, typ := range strings.Split(c.WebAPI.AddressBookType, ",") {
+		for _, typ := range types {
 			switch typ {
 			case EthereumAddressBook:
 				if c.WebAPI.EthereumAddressBook == nil {

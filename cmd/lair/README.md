@@ -122,10 +122,10 @@ Lair supports JSON and YAML configuration files.
       - `listenAddr` - Address on which the WebAPI server will listen for incoming connections. The address must be
         in the format `host:port`. When used with a TOR hidden service, the server should listen on localhost.
       - `socks5ProxyAddr` - Address of the SOCKS5 proxy server. The address must be in the format `host:port`.
-      - `addressBookType` (`string`) - Type of address book to use. Supported types are: `ethereum` and `static`.
+      - `addressBookType` (`string|[]string`) - Type of address book to use. Supported types are: `ethereum` and `static`.
         `ethereum` type uses a contract deployed on the Ethereum-compatible blockchain to store the list of addresses,
-        `static` type uses a static list of addresses defined in the configuration file. It is possible to use both
-        types at the same time by specifying a list of types separated by a comma.
+        `static` type uses a static list of addresses defined in the configuration file. It is possible to use multiple
+        address book types at the same time.
       - `ethereumAddressBook` - Configuration parameters for the Ethereum address book.
           - `addressBookAddr` - Ethereum address of the address book contract.
           - `ethereum` - Ethereum client configuration that is used to interact with the address book contract.
