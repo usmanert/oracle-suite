@@ -167,7 +167,7 @@ Example:
     - `gracefulTimeout` (`int`) - timeout to graceful finish requests to slower RPC nodes, it is used only
       when it is possible to return a correct response using responses from the remaining RPC nodes (
       default: 1).
-    - `gracefulTimeout` (`int`) - if multiple RPC nodes are used, determines how far one node can be behind
+    - `maxBlocksBehind` (`int`) - if multiple RPC nodes are used, determines how far one node can be behind
       the last known block (default: 0).
 - `logger` - Optional logger configuration.
     - `grafana` - Configuration of Grafana logger. Grafana logger can extract values from log messages and send them to
