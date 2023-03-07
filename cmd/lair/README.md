@@ -124,7 +124,8 @@ Lair supports JSON and YAML configuration files.
       - `socks5ProxyAddr` - Address of the SOCKS5 proxy server. The address must be in the format `host:port`.
       - `addressBookType` (`string`) - Type of address book to use. Supported types are: `ethereum` and `static`.
         `ethereum` type uses a contract deployed on the Ethereum-compatible blockchain to store the list of addresses,
-        `static` type uses a static list of addresses defined in the configuration file.
+        `static` type uses a static list of addresses defined in the configuration file. It is possible to use both
+        types at the same time by specifying a list of types separated by a comma.
       - `ethereumAddressBook` - Configuration parameters for the Ethereum address book.
           - `addressBookAddr` - Ethereum address of the address book contract.
           - `ethereum` - Ethereum client configuration that is used to interact with the address book contract.
@@ -134,7 +135,7 @@ Lair supports JSON and YAML configuration files.
               - `gracefulTimeout` (`int`) - timeout to graceful finish requests to slower RPC nodes, it is used only
                 when it is possible to return a correct response using responses from the remaining RPC nodes (
                 default: 1).
-              - `gracefulTimeout` (`int`) - if multiple RPC nodes are used, determines how far one node can be behind
+              - `maxBlocksBehind` (`int`) - if multiple RPC nodes are used, determines how far one node can be behind
                 the last known block (default: 0).
       - `staticAddressBook` - Configuration parameters for the static address book.
           - `remoteAddrs` (`[]string`) - List of remote addresses to which messages will be sent.

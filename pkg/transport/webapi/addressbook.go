@@ -17,6 +17,43 @@ type AddressBook interface {
 	Consumers(ctx context.Context) ([]string, error)
 }
 
+// MultiAddressBook is an implementation of AddressBook that merges the
+// addresses from multiple AddressBook instances.
+type MultiAddressBook struct {
+	books []AddressBook
+}
+
+// NewMultiAddressBook creates a new instance of MultiAddressBook.
+func NewMultiAddressBook(books ...AddressBook) *MultiAddressBook {
+	return &MultiAddressBook{
+		books: books,
+	}
+}
+
+// Consumers implements the AddressBook interface.
+func (m *MultiAddressBook) Consumers(ctx context.Context) ([]string, error) {
+	var addresses []string
+	for _, book := range m.books {
+		toMerge, err := book.Consumers(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, addr1 := range toMerge {
+			found := false
+			for _, addr2 := range addresses {
+				if addr1 == addr2 {
+					found = true
+					break
+				}
+			}
+			if !found {
+				addresses = append(addresses, addr1)
+			}
+		}
+	}
+	return addresses, nil
+}
+
 // StaticAddressBook is an implementation of AddressBook that returns a static
 // list of addresses.
 type StaticAddressBook struct {
