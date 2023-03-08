@@ -53,8 +53,7 @@ flag. Spire-Bootstrap supports JSON and YAML configuration files.
 ### Configuration reference
 
 - `transport` - Configuration parameters for transports mechanisms used to relay messages.
-    - `transport` (string) - Transport to use. Currently only the `libp2p` transport if supported. This field could be
-      omitted.
+    - `transport` (string|[]string) - Transport to use. It **must** be set to `libp2p`.
     - `libp2p` - Configuration parameters for the libp2p transport.
         - `privKeySeed` (`string`) - The random hex-encoded 32 bytes. It is used to generate a unique identity on the
           libp2p network. The value may be empty to generate a random seed.

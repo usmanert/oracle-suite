@@ -123,9 +123,9 @@ Spire supports JSON and YAML configuration files.
 ### Configuration reference
 
 - `transport` - Configuration parameters for transports mechanisms used to relay messages.
-    - `transport` (string) - Transport to use. Supported mechanism are: `libp2p` and `ssb`. If empty, the `libp2p` is
-      used.
-    - `libp2p` - Configuration parameters for the libp2p transport (Spire network).
+    - `transport` (string|[]string) - Transport to use. Supported mechanism are: `libp2p`, `ssb` and `webapi`. If empty,
+      the `libp2p` is used.
+    - `libp2p` - Configuration parameters for the libp2p transport.
         - `privKeySeed` (`string`) - The random hex-encoded 32 bytes. It is used to generate a unique identity on the
           libp2p network. The value may be empty to generate a random seed.
         - `listenAddrs` (`[]string`) - List of listening addresses for libp2p node encoded using the
@@ -139,6 +139,28 @@ Spire supports JSON and YAML configuration files.
           [multiaddress](https://docs.libp2p.io/concepts/addressing/) format.
         - `disableDiscovery` (`bool`) - Disables node discovery. If enabled, the IP address of a node will not be
           broadcast to other peers. This option must be used together with `directPeersAddrs`.
+    - `webapi` - Configuration parameters for the webapi transport. WebAPI transport uses the HTTP protocol to send
+      and receive messages. It should be used over a secure network like TOR, I2P or VPN.
+        - `listenAddr` - Address on which the WebAPI server will listen for incoming connections. The address must be
+          in the format `host:port`. When used with a TOR hidden service, the server should listen on localhost.
+        - `socks5ProxyAddr` - Address of the SOCKS5 proxy server. The address must be in the format `host:port`.
+        - `addressBookType` (`string|[]string`) - Type of address book to use. Supported types are: `ethereum` and `static`.
+          `ethereum` type uses a contract deployed on the Ethereum-compatible blockchain to store the list of addresses,
+          `static` type uses a static list of addresses defined in the configuration file. It is possible to use multiple
+          address book types at the same time.
+            - `ethereumAddressBook` - Configuration parameters for the Ethereum address book.
+                - `addressBookAddr` - Ethereum address of the address book contract.
+                - `ethereum` - Ethereum client configuration that is used to interact with the address book contract.
+                    - `rpc` (`string|[]string`) - List of RPC server addresses. It is recommended to use at least three
+                      addresses from different providers.
+                    - `timeout` (`int`) - total timeout in seconds (default: 10).
+                    - `gracefulTimeout` (`int`) - timeout to graceful finish requests to slower RPC nodes, it is used only
+                      when it is possible to return a correct response using responses from the remaining RPC nodes (
+                      default: 1).
+                    - `maxBlocksBehind` (`int`) - if multiple RPC nodes are used, determines how far one node can be behind
+                      the last known block (default: 0).
+            - `staticAddressBook` - Configuration parameters for the static address book.
+                - `remoteAddrs` (`[]string`) - List of remote addresses to which messages will be sent.
 - `feeds` (`[]string`) - List of hex-encoded addresses of other Oracles. Event messages from Oracles outside that list
   will be ignored.
 - `ethereum` - Configuration of the Ethereum wallet used to sign messages.
@@ -224,6 +246,12 @@ spire pull prices
 spire pull price BTCUSD 0xFeedEthereumAddress
 ```
 
+### Streaming price messages from the network
+
+```bash
+spire stream prices
+```
+
 ## Commands
 
 ```
@@ -231,11 +259,11 @@ Usage:
   spire [command]
 
 Available Commands:
-  agent       
-  completion  generate the autocompletion script for the specified shell
+  agent       Starts the Spire agent
   help        Help about any command
-  pull        
-  push        
+  pull        Pulls data from the Spire datastore (require agent)
+  push        Push a message to the network (require agent)
+  stream      Streams data from the network
 
 Flags:
   -c, --config string                                  spire config file (default "./config.json")
@@ -245,7 +273,6 @@ Flags:
       --version                                        version for spire
 
 Use "spire [command] --help" for more information about a command.
-
 ```
 
 ## License

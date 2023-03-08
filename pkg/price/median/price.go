@@ -13,7 +13,7 @@
 //  You should have received a copy of the GNU Affero General Public License
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package oracle
+package median
 
 import (
 	"encoding/binary"
@@ -47,24 +47,16 @@ type Price struct {
 	V byte
 	R [32]byte
 	S [32]byte
-
-	// StarkWare signature:
-	StarkR  []byte
-	StarkS  []byte
-	StarkPK []byte
 }
 
 // jsonPrice is the JSON representation of the Price structure.
 type jsonPrice struct {
-	Wat     string `json:"wat"`
-	Val     string `json:"val"`
-	Age     int64  `json:"age"`
-	V       string `json:"v"`
-	R       string `json:"r"`
-	S       string `json:"s"`
-	StarkR  string `json:"stark_r,omitempty"`
-	StarkS  string `json:"stark_s,omitempty"`
-	StarkPK string `json:"stark_pk,omitempty"`
+	Wat string `json:"wat"`
+	Val string `json:"val"`
+	Age int64  `json:"age"`
+	V   string `json:"v"`
+	R   string `json:"r"`
+	S   string `json:"s"`
 }
 
 func (p *Price) SetFloat64Price(price float64) {
@@ -118,31 +110,25 @@ func (p *Price) Fields(signer ethereum.Signer) log.Fields {
 	}
 
 	return log.Fields{
-		"from":    from,
-		"wat":     p.Wat,
-		"age":     p.Age.UTC().Format(time.RFC3339),
-		"val":     p.Val.String(),
-		"hash":    hex.EncodeToString(p.hash()),
-		"V":       hex.EncodeToString([]byte{p.V}),
-		"R":       hex.EncodeToString(p.R[:]),
-		"S":       hex.EncodeToString(p.S[:]),
-		"starkR":  encodeHexNumber(p.StarkR),
-		"starkS":  encodeHexNumber(p.StarkS),
-		"starkPK": encodeHexNumber(p.StarkPK),
+		"from": from,
+		"wat":  p.Wat,
+		"age":  p.Age.UTC().Format(time.RFC3339),
+		"val":  p.Val.String(),
+		"hash": hex.EncodeToString(p.hash()),
+		"V":    hex.EncodeToString([]byte{p.V}),
+		"R":    hex.EncodeToString(p.R[:]),
+		"S":    hex.EncodeToString(p.S[:]),
 	}
 }
 
 func (p *Price) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonPrice{
-		Wat:     p.Wat,
-		Val:     p.Val.String(),
-		Age:     p.Age.Unix(),
-		V:       hex.EncodeToString([]byte{p.V}),
-		R:       hex.EncodeToString(p.R[:]),
-		S:       hex.EncodeToString(p.S[:]),
-		StarkR:  encodeHexNumber(p.StarkR),
-		StarkS:  encodeHexNumber(p.StarkS),
-		StarkPK: encodeHexNumber(p.StarkPK),
+		Wat: p.Wat,
+		Val: p.Val.String(),
+		Age: p.Age.Unix(),
+		V:   hex.EncodeToString([]byte{p.V}),
+		R:   hex.EncodeToString(p.R[:]),
+		S:   hex.EncodeToString(p.S[:]),
 	})
 }
 
@@ -188,42 +174,7 @@ func (p *Price) UnmarshalJSON(bytes []byte) error {
 		}
 	}
 
-	p.StarkR, err = decodeHexNumber(j.StarkR)
-	if err != nil {
-		return errUnmarshalling("unable to decode StarkR param", err)
-	}
-
-	p.StarkS, err = decodeHexNumber(j.StarkS)
-	if err != nil {
-		return errUnmarshalling("unable to decode StarkS param", err)
-	}
-
-	p.StarkPK, err = decodeHexNumber(j.StarkPK)
-	if err != nil {
-		return errUnmarshalling("unable to decode StarkPK param", err)
-	}
-
 	return nil
-}
-
-func decodeHexNumber(s string) ([]byte, error) {
-	s = strings.TrimPrefix(s, "0x")
-	if s == "" || s == "0" {
-		return []byte{}, nil // fast path
-	}
-	n, ok := (&big.Int{}).SetString(s, 16)
-	if !ok {
-		return nil, errors.New("unable to parse hex number")
-	}
-	return n.Bytes(), nil
-}
-
-func encodeHexNumber(b []byte) string {
-	if len(b) == 0 {
-		return "0x0"
-	}
-	n := (&big.Int{}).SetBytes(b)
-	return "0x" + n.Text(16)
 }
 
 // hash is an equivalent of keccak256(abi.encodePacked(val_, age_, wat))) in Solidity.
