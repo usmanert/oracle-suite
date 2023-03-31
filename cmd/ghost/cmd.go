@@ -43,7 +43,7 @@ func NewRootCommand(opts *options) *cobra.Command {
 	rootCmd.PersistentFlags().StringVarP(
 		&opts.ConfigFilePath,
 		"config", "c",
-		"./config.json",
+		"./config.hcl",
 		"ghost config file",
 	)
 	rootCmd.PersistentFlags().BoolVar(

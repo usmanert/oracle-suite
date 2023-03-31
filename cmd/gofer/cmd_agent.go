@@ -28,7 +28,6 @@ func NewAgentCmd(opts *options) *cobra.Command {
 		Use:   "agent",
 		Args:  cobra.NoArgs,
 		Short: "Start an RPC server",
-		Long:  `Start an RPC server.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt)
 			sup, err := PrepareAgentServices(ctx, opts)

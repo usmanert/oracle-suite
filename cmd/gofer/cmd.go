@@ -40,7 +40,7 @@ with aggregates that increase reliability in the DeFi environment.`,
 		&opts.ConfigFilePath,
 		"config",
 		"c",
-		"./config.json",
+		"./config.hcl",
 		"config file",
 	)
 	rootCmd.PersistentFlags().VarP(

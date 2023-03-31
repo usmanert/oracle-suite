@@ -1,18 +1,3 @@
-//  Copyright (C) 2020 Maker Ecosystem Growth Holdings, INC.
-//
-//  This program is free software: you can redistribute it and/or modify
-//  it under the terms of the GNU Affero General Public License as
-//  published by the Free Software Foundation, either version 3 of the
-//  License, or (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful,
-//  but WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//  GNU Affero General Public License for more details.
-//
-//  You should have received a copy of the GNU Affero General Public License
-//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 package transport
 
 import (
@@ -23,18 +8,17 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	log2 "log"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/defiweb/go-eth/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"golang.org/x/net/proxy"
 
+	"github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
+
 	suite "github.com/chronicleprotocol/oracle-suite"
-	ethereumConfig "github.com/chronicleprotocol/oracle-suite/pkg/config/ethereum"
-	"github.com/chronicleprotocol/oracle-suite/pkg/ethereum"
 	"github.com/chronicleprotocol/oracle-suite/pkg/log"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport"
 	"github.com/chronicleprotocol/oracle-suite/pkg/transport/chain"
@@ -45,99 +29,134 @@ import (
 	"github.com/chronicleprotocol/oracle-suite/pkg/util/timeutil"
 )
 
-const (
-	LibP2P = "libp2p"
-	WebAPI = "webapi"
-)
-
-const (
-	EthereumAddressBook = "ethereum"
-	StaticAddressBook   = "static"
-)
-
-var p2pTransportFactory = func(cfg libp2p.Config) (transport.Transport, error) {
-	return libp2p.New(cfg)
-}
-
-type Transport struct {
-	Transport any          `yaml:"transport"`
-	P2P       LibP2PConfig `yaml:"libp2p"`
-	WebAPI    WebAPIConfig `yaml:"webapi"`
-}
-
-type LibP2PConfig struct {
-	PrivKeySeed      string   `yaml:"privKeySeed"`
-	ListenAddrs      []string `yaml:"listenAddrs"`
-	BootstrapAddrs   []string `yaml:"bootstrapAddrs"`
-	DirectPeersAddrs []string `yaml:"directPeersAddrs"`
-	BlockedAddrs     []string `yaml:"blockedAddrs"`
-	DisableDiscovery bool     `yaml:"disableDiscovery"`
-}
-
-type WebAPIConfig struct {
-	ListenAddr          string                           `yaml:"listenAddr"`
-	Socks5ProxyAddr     string                           `yaml:"socks5ProxyAddr"`
-	AddressBookType     any                              `yaml:"addressBookType"`
-	EthereumAddressBook *WebAPIEthereumAddressBookConfig `yaml:"ethereumAddressBook"`
-	StaticAddressBook   *WebAPIStaticAddressBookConfig   `yaml:"staticAddressBook"`
-}
-
-type WebAPIStaticAddressBookConfig struct {
-	RemoteAddrs []string `yaml:"remoteAddrs"`
-}
-
-type WebAPIEthereumAddressBookConfig struct {
-	AddressBookAddr ethereum.Address `yaml:"addressBookAddr"`
-	Ethereum        ethereumConfig.Ethereum
-}
-
 type Dependencies struct {
-	Signer ethereum.Signer
-	Feeds  []ethereum.Address
-	Logger log.Logger
+	Keys     ethereum.KeyRegistry
+	Clients  ethereum.ClientRegistry
+	Messages map[string]transport.Message
+	Feeds    []types.Address
+	Logger   log.Logger
 }
 
 type BootstrapDependencies struct {
 	Logger log.Logger
 }
 
-func (c *Transport) Configure(d Dependencies, t map[string]transport.Message) (transport.Transport, error) {
-	var types []string
-	switch varType := c.Transport.(type) {
-	case string:
-		types = []string{varType}
-	case []any:
-		for _, t := range varType {
-			if s, ok := t.(string); ok {
-				types = append(types, s)
-				continue
-			}
-			return nil, fmt.Errorf("transport config error: invalid transport type: %v", t)
-		}
-	case []string:
-		types = varType
-	case nil:
-		types = []string{LibP2P}
-	default:
-		return nil, fmt.Errorf("transport config error: invalid transport type: %v", varType)
-	}
-	switch len(types) {
-	case 1:
-		return c.configureTransport(d, types[0], t)
-	default:
-		var ts []transport.Transport
-		for _, typ := range types {
-			t, err := c.configureTransport(d, typ, t)
-			if err != nil {
-				return nil, err
-			}
-			ts = append(ts, t)
-		}
-		return chain.New(ts...), nil
-	}
+type ConfigTransport struct {
+	LibP2P *libP2PConfig `hcl:"libp2p,block"`
+	WebAPI *webAPIConfig `hcl:"webapi,block"`
+
+	// Configured transport:
+	transport transport.Transport
 }
 
-func (c *Transport) ConfigureP2PBoostrap(d BootstrapDependencies) (transport.Transport, error) {
+type libP2PConfig struct {
+	// ListenAddrs is the list of listening addresses for libp2p node encoded
+	// using the multiaddress format.
+	ListenAddrs []string `hcl:"listen_addrs"`
+
+	// PrivKeySeed is the random hex-encoded 32 bytes. It is used to generate
+	// a unique identity on the libp2p network. The value may be empty to
+	// generate a random seed.
+	PrivKeySeed string `hcl:"priv_key_seed,optional"`
+
+	// BootstrapAddrs is the list of bootstrap addresses for libp2p node
+	// encoded using the multiaddress format.
+	BootstrapAddrs []string `hcl:"bootstrap_addrs,optional"`
+
+	// DirectPeersAddrs is the list of direct peer addresses to which messages
+	// will be sent directly. Addresses are encoded using the format the
+	// multiaddress format. This option must be configured symmetrically on
+	// both ends.
+	DirectPeersAddrs []string `hcl:"direct_peers_addrs,optional"`
+
+	// BlockedAddrs is the list of blocked addresses encoded using the
+	// multiaddress format.
+	BlockedAddrs []string `hcl:"blocked_addrs,optional"`
+
+	// DisableDiscovery disables node discovery. If enabled, the IP address of
+	// a node will not be broadcast to other peers. This option must be used
+	// together with `directPeersAddrs`.
+	DisableDiscovery bool `hcl:"disable_discovery,optional"`
+
+	// EthereumKey is the name of the Ethereum key to use for signing messages.
+	// Required if the transport is used for sending messages.
+	EthereumKey string `hcl:"ethereum_key,optional"`
+}
+
+type webAPIConfig struct {
+	// ListenAddr is the address on which the WebAPI server will listen for
+	// incoming connections. The address must be in the format `host:port`.
+	// When used with a TOR hidden service, the server should listen on
+	// localhost.
+	ListenAddr string `hcl:"listen_addr"`
+
+	// Socks5ProxyAddr is the address of the SOCKS5 proxy server. The address
+	// must be in the format `host:port`.
+	Socks5ProxyAddr string `hcl:"socks5_proxy_addr,optional"`
+
+	// EthereumKey is the name of the Ethereum key to use for signing messages.
+	// Required if the transport is used for sending messages.
+	EthereumKey string `hcl:"ethereum_key"`
+
+	// AddressBook configuration. Address book provides a list of addresses
+	// to which messages will be sent.
+
+	// EthereumAddressBook is the configuration for the Ethereum address book.
+	EthereumAddressBook *webAPIEthereumAddressBook `hcl:"ethereum_address_book,block"`
+
+	// StaticAddressBook is the configuration for the static address book.
+	StaticAddressBook *webAPIStaticAddressBook `hcl:"static_address_book,block"`
+}
+
+type webAPIEthereumAddressBook struct {
+	// ContractAddr is the Ethereum address of the address book contract.
+	ContractAddr string `hcl:"contract_addr"`
+
+	// EthereumClient is the name of the Ethereum client to use for reading
+	// the address book.
+	EthereumClient string `hcl:"ethereum_client"`
+}
+
+type webAPIStaticAddressBook struct {
+	// Addresses is the list of static addresses to which messages will be
+	// sent.
+	Addresses []string `hcl:"addresses"`
+}
+
+func (c *ConfigTransport) Transport(d Dependencies) (transport.Transport, error) {
+	if c.transport != nil {
+		return c.transport, nil
+	}
+	var transports []transport.Transport
+	switch {
+	case c.LibP2P != nil:
+		t, err := c.configureLibP2P(d)
+		if err != nil {
+			return nil, err
+		}
+		transports = append(transports, t)
+	case c.WebAPI != nil:
+		t, err := c.configureWebAPI(d)
+		if err != nil {
+			return nil, err
+		}
+		transports = append(transports, t)
+	}
+	switch {
+	case len(transports) == 0:
+		return nil, errors.New("no transport configured")
+	case len(transports) == 1:
+		c.transport = transports[0]
+	default:
+		c.transport = chain.New(transports...)
+	}
+	return c.transport, nil
+}
+
+func (c *ConfigTransport) LibP2PBootstrap(d BootstrapDependencies) (transport.Transport, error) {
+	if c.LibP2P == nil {
+		return nil, errors.New("libP2P transport not configured")
+	}
 	peerPrivKey, err := c.generatePrivKey()
 	if err != nil {
 		return nil, err
@@ -145,158 +164,139 @@ func (c *Transport) ConfigureP2PBoostrap(d BootstrapDependencies) (transport.Tra
 	cfg := libp2p.Config{
 		Mode:             libp2p.BootstrapMode,
 		PeerPrivKey:      peerPrivKey,
-		ListenAddrs:      c.P2P.ListenAddrs,
-		BootstrapAddrs:   c.P2P.BootstrapAddrs,
-		DirectPeersAddrs: c.P2P.DirectPeersAddrs,
-		BlockedAddrs:     c.P2P.BlockedAddrs,
+		ListenAddrs:      c.LibP2P.ListenAddrs,
+		BootstrapAddrs:   c.LibP2P.BootstrapAddrs,
+		DirectPeersAddrs: c.LibP2P.DirectPeersAddrs,
+		BlockedAddrs:     c.LibP2P.BlockedAddrs,
 		Logger:           d.Logger,
 		AppName:          "bootstrap",
 		AppVersion:       suite.Version,
 	}
-	p, err := p2pTransportFactory(cfg)
+	p, err := libp2p.New(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("transport config error: %w", err)
+		return nil, fmt.Errorf("transport config: %w", err)
 	}
 	return p, nil
 }
 
-//nolint:funlen,gocyclo
-func (c *Transport) configureTransport(
-	d Dependencies,
-	typ string,
-	t map[string]transport.Message) (transport.Transport, error) {
-
-	switch strings.ToLower(typ) {
-	case WebAPI:
-		if c.WebAPI.ListenAddr == "" {
-			return nil, errors.New("webapi listen addr not set")
-		}
-		var types []string
-		switch varType := c.WebAPI.AddressBookType.(type) {
-		case string:
-			types = []string{varType}
-		case []any:
-			for _, t := range varType {
-				if s, ok := t.(string); ok {
-					types = append(types, s)
-					continue
-				}
-				return nil, fmt.Errorf("transport config error: invalid address book type: %v", t)
-			}
-		}
-		var addressBooks []webapi.AddressBook
-		for _, typ := range types {
-			switch typ {
-			case EthereumAddressBook:
-				if c.WebAPI.EthereumAddressBook == nil {
-					return nil, errors.New("ethereum address book config not set")
-				}
-				cli, err := c.WebAPI.EthereumAddressBook.Ethereum.ConfigureEthereumClient(d.Signer, d.Logger)
-				if err != nil {
-					return nil, fmt.Errorf("cannot configure ethereum client: %w", err)
-				}
-				addressBooks = append(
-					addressBooks,
-					webapi.NewEthereumAddressBook(cli, c.WebAPI.EthereumAddressBook.AddressBookAddr, time.Hour),
-				)
-			case StaticAddressBook:
-				if c.WebAPI.StaticAddressBook == nil {
-					return nil, errors.New("static address book config not set")
-				}
-				addressBooks = append(
-					addressBooks,
-					webapi.NewStaticAddressBook(c.WebAPI.StaticAddressBook.RemoteAddrs),
-				)
-			default:
-				if c.WebAPI.AddressBookType == "" {
-					return nil, errors.New("address book type not set")
-				}
-				return nil, fmt.Errorf("invalid address book type: %s", c.WebAPI.AddressBookType)
-			}
-		}
-		var addressBook webapi.AddressBook
-		switch len(addressBooks) {
-		case 0:
-			return nil, errors.New("no address book configured")
-		case 1:
-			addressBook = addressBooks[0]
-		default:
-			addressBook = webapi.NewMultiAddressBook(addressBooks...)
-		}
-
-		consumers, err := addressBook.Consumers(context.Background())
+func (c *ConfigTransport) configureWebAPI(d Dependencies) (transport.Transport, error) {
+	// Configure HTTP client:
+	httpClient := http.DefaultClient
+	if len(c.WebAPI.Socks5ProxyAddr) != 0 {
+		dialer, err := proxy.SOCKS5("tcp", c.WebAPI.Socks5ProxyAddr, nil, proxy.Direct)
 		if err != nil {
-			return nil, fmt.Errorf("cannot get consumers: %w", err)
+			return nil, fmt.Errorf("cannot connect to the proxy: %w", err)
 		}
-		for _, consumer := range consumers {
-			log2.Println("consumer:", consumer)
+		httpClient.Transport = &http.Transport{
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				return dialer.Dial(network, address)
+			},
 		}
-
-		httpClient := http.DefaultClient
-		if len(c.WebAPI.Socks5ProxyAddr) != 0 {
-			dialSocksProxy, err := proxy.SOCKS5("tcp", c.WebAPI.Socks5ProxyAddr, nil, proxy.Direct)
-			if err != nil {
-				return nil, fmt.Errorf("cannot connect to the proxy: %w", err)
-			}
-			httpClient.Transport = &http.Transport{
-				DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-					return dialSocksProxy.Dial(network, address)
-				},
-			}
-		}
-		tra, err := webapi.New(webapi.Config{
-			ListenAddr:      c.WebAPI.ListenAddr,
-			AddressBook:     addressBook,
-			Topics:          t,
-			AuthorAllowlist: d.Feeds,
-			FlushTicker:     timeutil.NewTicker(time.Minute),
-			Signer:          d.Signer,
-			Client:          httpClient,
-			Logger:          d.Logger,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("cannot configure webapi transport: %w", err)
-		}
-		return recoverer.New(tra, d.Logger), nil
-	case LibP2P:
-		fallthrough
-	default:
-		peerPrivKey, err := c.generatePrivKey()
-		if err != nil {
-			return nil, err
-		}
-		var mPK crypto.PrivKey
-		if d.Signer != nil && d.Signer.Address() != ethereum.EmptyAddress {
-			mPK = ethkey.NewPrivKey(d.Signer)
-		}
-		cfg := libp2p.Config{
-			Mode:             libp2p.ClientMode,
-			PeerPrivKey:      peerPrivKey,
-			Topics:           t,
-			MessagePrivKey:   mPK,
-			ListenAddrs:      c.P2P.ListenAddrs,
-			BootstrapAddrs:   c.P2P.BootstrapAddrs,
-			DirectPeersAddrs: c.P2P.DirectPeersAddrs,
-			BlockedAddrs:     c.P2P.BlockedAddrs,
-			AuthorAllowlist:  d.Feeds,
-			Discovery:        !c.P2P.DisableDiscovery,
-			Signer:           d.Signer,
-			Logger:           d.Logger,
-			AppName:          "spire",
-			AppVersion:       suite.Version,
-		}
-		tra, err := p2pTransportFactory(cfg)
-		if err != nil {
-			return nil, err
-		}
-		return recoverer.New(tra, d.Logger), nil
 	}
+
+	// Configure address book:
+	var (
+		addressBook  webapi.AddressBook
+		addressBooks []webapi.AddressBook
+	)
+	switch {
+	case c.WebAPI.EthereumAddressBook != nil:
+		rpcClient := d.Clients[c.WebAPI.EthereumAddressBook.EthereumClient]
+		if rpcClient == nil {
+			return nil, fmt.Errorf("WebAPI config: ethereum client %q not found", c.WebAPI.EthereumAddressBook.EthereumClient)
+		}
+		contractAddr, err := types.AddressFromHex(c.WebAPI.EthereumAddressBook.ContractAddr)
+		if err != nil || contractAddr == types.ZeroAddress {
+			return nil, fmt.Errorf("WebAPI config: invalid contract address %q", c.WebAPI.EthereumAddressBook.ContractAddr)
+		}
+		addressBooks = append(addressBooks, webapi.NewEthereumAddressBook(
+			rpcClient,
+			contractAddr,
+			time.Hour,
+		))
+	case c.WebAPI.StaticAddressBook != nil:
+		addressBooks = append(
+			addressBooks,
+			webapi.NewStaticAddressBook(c.WebAPI.StaticAddressBook.Addresses),
+		)
+	}
+	switch {
+	case len(addressBooks) == 0:
+		return nil, errors.New("WebAPI config: no address book configured")
+	case len(addressBooks) == 1:
+		addressBook = addressBooks[0]
+	default:
+		addressBook = webapi.NewMultiAddressBook(addressBooks...)
+	}
+
+	// Configure signer:
+	key := d.Keys[c.WebAPI.EthereumKey]
+	if c.WebAPI.EthereumKey != "" && key == nil {
+		return nil, fmt.Errorf("WebAPI config: key %q not found", c.WebAPI.EthereumKey)
+	}
+
+	// Configure transport:
+	webapiTransport, err := webapi.New(webapi.Config{
+		ListenAddr:      c.WebAPI.ListenAddr,
+		AddressBook:     addressBook,
+		Topics:          d.Messages,
+		AuthorAllowlist: d.Feeds,
+		FlushTicker:     timeutil.NewTicker(time.Minute),
+		Signer:          key,
+		Client:          httpClient,
+		Logger:          d.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("WebAPI config: %w", err)
+	}
+	return recoverer.New(webapiTransport, d.Logger), nil
 }
 
-func (c *Transport) generatePrivKey() (crypto.PrivKey, error) {
+func (c *ConfigTransport) configureLibP2P(d Dependencies) (transport.Transport, error) {
+	// Configure signer:
+	key := d.Keys[c.LibP2P.EthereumKey]
+	if c.LibP2P.EthereumKey != "" && key == nil {
+		return nil, fmt.Errorf("WebAPI config: key %q not found", c.WebAPI.EthereumKey)
+	}
+
+	// Configure LibP2P private keys:
+	peerPrivKey, err := c.generatePrivKey()
+	if err != nil {
+		return nil, fmt.Errorf("LibP2P config: %w", err)
+	}
+	var messagePrivKey crypto.PrivKey
+	if key != nil {
+		messagePrivKey = ethkey.NewPrivKey(key)
+	}
+
+	// Configure LibP2P transport:
+	cfg := libp2p.Config{
+		Mode:             libp2p.ClientMode,
+		PeerPrivKey:      peerPrivKey,
+		Topics:           d.Messages,
+		MessagePrivKey:   messagePrivKey,
+		ListenAddrs:      c.LibP2P.ListenAddrs,
+		BootstrapAddrs:   c.LibP2P.BootstrapAddrs,
+		DirectPeersAddrs: c.LibP2P.DirectPeersAddrs,
+		BlockedAddrs:     c.LibP2P.BlockedAddrs,
+		AuthorAllowlist:  d.Feeds,
+		Discovery:        !c.LibP2P.DisableDiscovery,
+		Signer:           key,
+		Logger:           d.Logger,
+		AppName:          "spire",
+		AppVersion:       suite.Version,
+	}
+	libP2PTransport, err := libp2p.New(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return recoverer.New(libP2PTransport, d.Logger), nil
+}
+
+func (c *ConfigTransport) generatePrivKey() (crypto.PrivKey, error) {
 	seedReader := rand.Reader
-	if len(c.P2P.PrivKeySeed) != 0 {
-		seed, err := hex.DecodeString(c.P2P.PrivKeySeed)
+	if len(c.LibP2P.PrivKeySeed) != 0 {
+		seed, err := hex.DecodeString(c.LibP2P.PrivKeySeed)
 		if err != nil {
 			return nil, fmt.Errorf("invalid privKeySeed value, failed to decode hex data: %w", err)
 		}
