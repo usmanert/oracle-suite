@@ -24,6 +24,6 @@ EXPOSE 8082
 EXPOSE 9000
 EXPOSE 9100
 
-COPY ./config.json .
+COPY ./config.hcl .
 
 CMD ["/bin/bash"]
