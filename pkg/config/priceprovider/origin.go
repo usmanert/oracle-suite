@@ -78,6 +78,8 @@ func NewHandler(
 			BaseURL:           baseURL,
 			ContractAddresses: contracts,
 		}, aliases), nil
+	case "gsu":
+		return origins.NewBaseExchangeHandler(origins.GSU{WorkerPool: wp}, aliases), nil
 	case "binance":
 		baseURL := parseSingleParam(params, "url")
 		return origins.NewBaseExchangeHandler(origins.Binance{WorkerPool: wp, BaseURL: baseURL}, aliases), nil
