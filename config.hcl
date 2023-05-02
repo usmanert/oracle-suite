@@ -335,6 +335,10 @@ gofer {
     min_sources = 3
   }
 
+  price_model "ETH/GSU" "median" {
+    source "BTC/USD" "origin" { origin = "gsu" }
+    min_sources = 1
+  }
   price_model "ETH/BTC" "median" {
     source "ETH/BTC" "origin" { origin = "binance_us" }
     source "ETH/BTC" "origin" { origin = "bitstamp" }
