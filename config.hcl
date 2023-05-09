@@ -1,3 +1,7 @@
+include = [
+  "./config_gofernext.hcl"
+]
+
 variables {
   # List of feeds that are allowed to send price updates and event attestations.
   feeds = [
