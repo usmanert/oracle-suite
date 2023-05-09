@@ -370,6 +370,12 @@ gofer {
     min_sources = 3
   }
 
+  price_model "ETH/GSU" "median" {
+    source "ETH/GSU" "origin" { origin = "gsu" }
+    source "ETH/GSU" "origin" { origin = "gsu1" }
+    source "ETH/GSU" "origin" { origin = "gsu2" }
+    min_sources = 1
+  }
   price_model "GNO/USD" "median" {
     source "GNO/USD" "indirect" {
       source "ETH/GNO" "origin" { origin = "balancerV2" }
