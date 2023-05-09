@@ -181,9 +181,6 @@ func TestFeeder_Broadcast(t *testing.T) {
 				<-localTransport.Wait()
 			}()
 
-			// Wait for service to start.
-			time.Sleep(time.Millisecond * 100)
-
 			ticker.Tick()
 
 			// Wait for two messages.
@@ -192,18 +189,10 @@ func TestFeeder_Broadcast(t *testing.T) {
 			v1ch := localTransport.Messages(messages.PriceV1MessageName)
 			for {
 				select {
-				case msg, ok := <-v0ch:
-					if !ok {
-						require.Fail(t, "v0 channel closed")
-						continue
-					}
+				case msg := <-v0ch:
 					price := msg.Message.(*messages.Price)
 					pricesV0 = append(pricesV0, price)
-				case msg, ok := <-v1ch:
-					if !ok {
-						require.Fail(t, "v1 channel closed")
-						continue
-					}
+				case msg := <-v1ch:
 					price := msg.Message.(*messages.Price)
 					pricesV1 = append(pricesV1, price)
 				}
