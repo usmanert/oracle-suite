@@ -152,3 +152,5 @@ require (
 	lukechampine.com/blake3 v1.1.7 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
 )
+
+replace go.cryptoscope.co/netwrap v0.1.1 => github.com/ssbc/go-netwrap v0.1.1
