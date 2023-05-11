@@ -141,4 +141,8 @@ func (h *GSU) newPrice(pair Pair, resp gsuResponse) (Price, error) {
                 Volume24h: volume,
                 Timestamp: time.Now(),
         }, nil
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 0c9787193ade2ad5a42434a4960b97ee3679e6e1

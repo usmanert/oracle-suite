@@ -25,7 +25,11 @@ import (
 )
 
 // GSU2 URL
+<<<<<<< HEAD
 const gsu2URL = "https://api.gsucoin.app/Products/GSULive/?symbol=%s"
+=======
+const gsu2URL = "https://api1.gsucoin.app/Products/GSULive/?symbol=%s"
+>>>>>>> 0c9787193ade2ad5a42434a4960b97ee3679e6e1
 
 type gsu2Response struct {
         Price     string    `json:"price"`
@@ -140,4 +144,8 @@ func (h *GSU2) newPrice(pair Pair, resp gsu2Response) (Price, error) {
                 Volume24h: volume,
                 Timestamp: time.Now(),
         }, nil
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 0c9787193ade2ad5a42434a4960b97ee3679e6e1
