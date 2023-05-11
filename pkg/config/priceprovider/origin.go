@@ -125,7 +125,6 @@ func NewHandler(
 		baseURL := parseSingleParam(params, "url")
 		return origins.NewBaseExchangeHandler(origins.Gateio{WorkerPool: wp, BaseURL: baseURL}, aliases), nil
 	case "gemini":
-<<<<<<< HEAD:pkg/config/gofer/origin.go
 		return origins.NewBaseExchangeHandler(origins.Gemini{WorkerPool: wp}, aliases), nil
 	case "gsu":
 		return origins.NewBaseExchangeHandler(origins.GSU{WorkerPool: wp}, aliases), nil
@@ -133,10 +132,6 @@ func NewHandler(
 		return origins.NewBaseExchangeHandler(origins.GSU1{WorkerPool: wp}, aliases), nil
 	case "gsu2":
 		return origins.NewBaseExchangeHandler(origins.GSU2{WorkerPool: wp}, aliases), nil
-=======
-		baseURL := parseSingleParam(params, "url")
-		return origins.NewBaseExchangeHandler(origins.Gemini{WorkerPool: wp, BaseURL: baseURL}, aliases), nil
->>>>>>> 0c9787193ade2ad5a42434a4960b97ee3679e6e1:pkg/config/priceprovider/origin.go
 	case "hitbtc":
 		baseURL := parseSingleParam(params, "url")
 		return origins.NewBaseExchangeHandler(origins.Hitbtc{WorkerPool: wp, BaseURL: baseURL}, aliases), nil
