@@ -70,8 +70,6 @@ func NewHandler(
 
 	aliases := parseParamsSymbolAliases(params)
 	switch origin {
-	case "gsu":
-		return origins.NewBaseExchangeHandler(origins.GSU{WorkerPool: wp}, aliases), nil
 	case "balancer":
 		contracts := parseParamsContracts(params)
 		baseURL := parseSingleParam(params, "url")
